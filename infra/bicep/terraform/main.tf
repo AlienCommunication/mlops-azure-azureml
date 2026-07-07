@@ -69,14 +69,14 @@ resource "azurerm_resource_group" "env" {
 resource "azurerm_storage_account" "env" {
   for_each = local.env_map
 
-  name                     = each.value.storage_name
-  resource_group_name      = azurerm_resource_group.env[each.key].name
-  location                 = azurerm_resource_group.env[each.key].location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
-  min_tls_version          = "TLS1_2"
+  name                          = each.value.storage_name
+  resource_group_name           = azurerm_resource_group.env[each.key].name
+  location                      = azurerm_resource_group.env[each.key].location
+  account_tier                  = "Standard"
+  account_replication_type      = "LRS"
+  min_tls_version               = "TLS1_2"
   public_network_access_enabled = var.enable_private_networking ? false : true
-  tags                     = merge(var.tags, { environment = each.key })
+  tags                          = merge(var.tags, { environment = each.key })
 }
 
 resource "azurerm_key_vault" "env" {
@@ -119,13 +119,13 @@ resource "azurerm_application_insights" "env" {
 resource "azurerm_container_registry" "env" {
   for_each = local.env_map
 
-  name                = each.value.acr_name
-  location            = azurerm_resource_group.env[each.key].location
-  resource_group_name = azurerm_resource_group.env[each.key].name
-  sku                 = "Basic"
-  admin_enabled       = false
+  name                          = each.value.acr_name
+  location                      = azurerm_resource_group.env[each.key].location
+  resource_group_name           = azurerm_resource_group.env[each.key].name
+  sku                           = "Basic"
+  admin_enabled                 = false
   public_network_access_enabled = var.enable_private_networking ? false : true
-  tags                = merge(var.tags, { environment = each.key })
+  tags                          = merge(var.tags, { environment = each.key })
 }
 
 resource "azapi_resource" "workspace" {

@@ -134,7 +134,7 @@ variable "devops_environments" {
 
 variable "variable_group_names" {
   description = "Azure DevOps variable group names."
-  type = map(string)
+  type        = map(string)
   default = {
     dev  = "aml-dev-shared"
     test = "aml-test-shared"
