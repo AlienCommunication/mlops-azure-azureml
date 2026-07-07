@@ -148,6 +148,36 @@ Use Azure DevOps variable groups linked to Key Vault for:
 - external system credentials
 - alerting webhooks if required
 
+## Terraform Input Strategy In CI/CD
+
+For enterprise CI/CD, split Terraform inputs into two classes:
+
+1. `Secret inputs`
+   Store in Azure Key Vault and surface into Azure DevOps through Key Vault-backed variable groups or secret pipeline variables.
+
+2. `Non-secret inputs`
+   Store in Azure DevOps variable groups or pipeline variables using Terraform environment-variable naming like `TF_VAR_subscription_id`.
+
+Recommended examples:
+
+- Key Vault backed:
+  - `AZURE_DEVOPS_PAT`
+  - `TF_VAR_service_principal_key` if still used
+
+- Azure DevOps non-secret variables:
+  - `TF_VAR_subscription_id`
+  - `TF_VAR_subscription_name`
+  - `TF_VAR_tenant_id`
+  - `TF_VAR_location`
+  - `TF_VAR_prefix`
+  - `TF_VAR_registry_name`
+  - `TF_VAR_azure_devops_org_service_url`
+  - `TF_VAR_azure_devops_project_name`
+  - `TF_VAR_service_connection_name`
+  - `TF_VAR_azure_auth_mode`
+
+Avoid making the CI/CD pipeline depend on a developer-local `terraform.tfvars` file.
+
 ## Environment Separation
 
 Keep separate:

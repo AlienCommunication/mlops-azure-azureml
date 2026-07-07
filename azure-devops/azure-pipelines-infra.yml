@@ -17,10 +17,13 @@ pr:
       - azure-devops/azure-pipelines-infra.yml
 
 variables:
-  terraformVersion: '1.9.8'
-  projectRoot: '.'
-  terraformRoot: 'infra/bicep/terraform'
-  tfVarsFile: 'terraform.tfvars'
+  - group: aml-infra-tfvars
+  - name: terraformVersion
+    value: '1.9.8'
+  - name: projectRoot
+    value: '.'
+  - name: terraformRoot
+    value: 'infra/bicep/terraform'
 
 stages:
   - stage: Terraform_Validate_And_Plan
@@ -58,9 +61,28 @@ stages:
             displayName: Terraform validate
 
           - script: |
-              terraform plan -var-file=$(tfVarsFile) -out=tfplan
+              terraform plan -out=tfplan
             workingDirectory: $(terraformRoot)
             env:
+              TF_VAR_subscription_id: $(TF_VAR_subscription_id)
+              TF_VAR_subscription_name: $(TF_VAR_subscription_name)
+              TF_VAR_tenant_id: $(TF_VAR_tenant_id)
+              TF_VAR_location: $(TF_VAR_location)
+              TF_VAR_prefix: $(TF_VAR_prefix)
+              TF_VAR_registry_name: $(TF_VAR_registry_name)
+              TF_VAR_create_registry: $(TF_VAR_create_registry)
+              TF_VAR_enable_private_networking: $(TF_VAR_enable_private_networking)
+              TF_VAR_self_hosted_agents_enabled: $(TF_VAR_self_hosted_agents_enabled)
+              TF_VAR_vnet_address_space: $(TF_VAR_vnet_address_space)
+              TF_VAR_private_endpoints_subnet_prefix: $(TF_VAR_private_endpoints_subnet_prefix)
+              TF_VAR_agents_subnet_prefix: $(TF_VAR_agents_subnet_prefix)
+              TF_VAR_azure_devops_org_service_url: $(TF_VAR_azure_devops_org_service_url)
+              TF_VAR_azure_devops_project_name: $(TF_VAR_azure_devops_project_name)
+              TF_VAR_service_connection_name: $(TF_VAR_service_connection_name)
+              TF_VAR_existing_service_endpoint_id: $(TF_VAR_existing_service_endpoint_id)
+              TF_VAR_azure_auth_mode: $(TF_VAR_azure_auth_mode)
+              TF_VAR_service_principal_id: $(TF_VAR_service_principal_id)
+              TF_VAR_service_principal_key: $(TF_VAR_service_principal_key)
               TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
             displayName: Terraform plan
 
@@ -107,5 +129,24 @@ stages:
                     terraform apply -auto-approve tfplan
                   workingDirectory: $(terraformRoot)
                   env:
+                    TF_VAR_subscription_id: $(TF_VAR_subscription_id)
+                    TF_VAR_subscription_name: $(TF_VAR_subscription_name)
+                    TF_VAR_tenant_id: $(TF_VAR_tenant_id)
+                    TF_VAR_location: $(TF_VAR_location)
+                    TF_VAR_prefix: $(TF_VAR_prefix)
+                    TF_VAR_registry_name: $(TF_VAR_registry_name)
+                    TF_VAR_create_registry: $(TF_VAR_create_registry)
+                    TF_VAR_enable_private_networking: $(TF_VAR_enable_private_networking)
+                    TF_VAR_self_hosted_agents_enabled: $(TF_VAR_self_hosted_agents_enabled)
+                    TF_VAR_vnet_address_space: $(TF_VAR_vnet_address_space)
+                    TF_VAR_private_endpoints_subnet_prefix: $(TF_VAR_private_endpoints_subnet_prefix)
+                    TF_VAR_agents_subnet_prefix: $(TF_VAR_agents_subnet_prefix)
+                    TF_VAR_azure_devops_org_service_url: $(TF_VAR_azure_devops_org_service_url)
+                    TF_VAR_azure_devops_project_name: $(TF_VAR_azure_devops_project_name)
+                    TF_VAR_service_connection_name: $(TF_VAR_service_connection_name)
+                    TF_VAR_existing_service_endpoint_id: $(TF_VAR_existing_service_endpoint_id)
+                    TF_VAR_azure_auth_mode: $(TF_VAR_azure_auth_mode)
+                    TF_VAR_service_principal_id: $(TF_VAR_service_principal_id)
+                    TF_VAR_service_principal_key: $(TF_VAR_service_principal_key)
                     TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
                   displayName: Terraform apply

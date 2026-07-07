@@ -38,7 +38,9 @@ Use:
 
 - GitHub as the source repository
 - Azure DevOps pipeline YAML from this folder
-- Azure DevOps secret variable `AZURE_DEVOPS_PAT` for Terraform bootstrap to the Azure DevOps provider
+- Azure Key Vault for secret storage
+- Azure DevOps variable groups for non-secret Terraform inputs
+- Azure DevOps secret variable or Key Vault-backed variable for `AZURE_DEVOPS_PAT` during Terraform bootstrap to the Azure DevOps provider
 - Azure Resource Manager service connection for deployment
 - Azure DevOps Environments for `aml-test-approval`, `aml-test`, and `aml-prod`
 - Azure DevOps Environment `aml-platform-infra` for approval-gated Terraform apply
@@ -56,10 +58,61 @@ The ML pipeline should not be the first place where platform provisioning is att
 
 Pipeline variables or variable groups should provide:
 
-- `AZURE_DEVOPS_PAT` as a secret variable for the Terraform infra pipeline
+- `AZURE_DEVOPS_PAT` as a secret variable or Key Vault-backed secret for the Terraform infra pipeline
+- non-secret Terraform inputs as pipeline variables or variable-group variables using `TF_VAR_...` names
 - `WORKSPACE_MODEL_VERSION`
 - `REGISTRY_MODEL_VERSION`
 - optional environment-specific overrides
+
+## Terraform Input Pattern
+
+For production CI/CD, do not depend on a developer-local `terraform.tfvars` file.
+
+Recommended pattern:
+
+1. store secrets in Azure Key Vault
+2. expose secrets to Azure DevOps through a Key Vault-backed variable group or secret pipeline variables
+3. expose non-secret Terraform inputs through Azure DevOps variables or variable groups using `TF_VAR_...` names
+4. let the Terraform pipeline consume those environment variables directly
+
+Examples of non-secret Terraform inputs to define in Azure DevOps:
+
+- `TF_VAR_subscription_id`
+- `TF_VAR_subscription_name`
+- `TF_VAR_tenant_id`
+- `TF_VAR_location`
+- `TF_VAR_prefix`
+- `TF_VAR_registry_name`
+- `TF_VAR_azure_devops_org_service_url`
+- `TF_VAR_azure_devops_project_name`
+- `TF_VAR_service_connection_name`
+- `TF_VAR_azure_auth_mode`
+
+Examples of secret Terraform inputs to source from Key Vault:
+
+- `AZURE_DEVOPS_PAT`
+- `TF_VAR_service_principal_key` if secret-based auth is still used
+
+## Where To Add Them In Azure DevOps
+
+Use two different Azure DevOps locations:
+
+1. `Pipelines -> Library -> Variable groups`
+   Use this for non-secret Terraform inputs such as:
+   - `TF_VAR_subscription_id`
+   - `TF_VAR_location`
+   - `TF_VAR_prefix`
+   - `TF_VAR_azure_devops_project_name`
+
+2. `Pipeline -> Edit -> Variables`
+   Use this for direct pipeline variables and secrets such as:
+   - `AZURE_DEVOPS_PAT`
+
+Important:
+
+- `aml-infra-tfvars` is a Library variable group
+- it is not added from the `New variable` popup
+- this repo's infrastructure pipeline references it directly in YAML
 
 ## Production Notes
 

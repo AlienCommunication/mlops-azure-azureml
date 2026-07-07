@@ -437,7 +437,7 @@ If you are setting this up in a real organization, follow this order:
 2. Review [identity-and-credentials.md](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/docs/identity-and-credentials.md).
 3. Review [provisioning-infra.md](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/provisioning-infra.md).
 4. Review [infra/terraform/README.md](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/terraform/README.md).
-5. Adjust Terraform variables and naming standards for your Azure estate.
+5. Define Terraform inputs in Azure DevOps variables, variable groups, and Azure Key Vault.
 6. Provision Azure platform and Azure DevOps foundation resources.
 7. Verify service connection, environments, and variable groups.
 8. Register or prepare production data assets.
@@ -481,9 +481,23 @@ Fill those in:
 
 - [infra/terraform/terraform.tfvars.example](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/terraform/terraform.tfvars.example)
 
-Create:
+Preferred production pattern:
 
-- `azure-mlops/infra/terraform/terraform.tfvars`
+- store secrets in Azure Key Vault
+- expose them through Azure DevOps variable groups or secret variables
+- define non-secret Terraform inputs in Azure DevOps using `TF_VAR_...` variables
+- avoid making CI/CD depend on a developer-local `terraform.tfvars`
+
+Where to place them in Azure DevOps:
+
+- `Pipelines -> Library -> Variable groups`
+  For non-secret Terraform configuration such as `TF_VAR_subscription_id` and `TF_VAR_location`
+- `Pipeline -> Edit -> Variables`
+  For direct pipeline secrets such as `AZURE_DEVOPS_PAT`
+
+The infrastructure pipeline is designed to read the Library variable group:
+
+- `aml-infra-tfvars`
 
 #### How To Get These Values
 
@@ -509,8 +523,8 @@ azure_devops_org_service_url = "https://dev.azure.com/<your-org>"
 
 Where to update:
 
-- [terraform.tfvars.example](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/terraform/terraform.tfvars.example)
-- your real `azure-mlops/infra/terraform/terraform.tfvars`
+- Azure DevOps variable group or pipeline variable named `TF_VAR_azure_devops_org_service_url`
+- local `terraform.tfvars` only for optional developer debugging
 
 ##### 2. Azure DevOps project name
 
@@ -533,8 +547,8 @@ azure_devops_project_name = "<your-project>"
 
 Where to update:
 
-- [terraform.tfvars.example](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/terraform/terraform.tfvars.example)
-- your real `azure-mlops/infra/terraform/terraform.tfvars`
+- Azure DevOps variable group or pipeline variable named `TF_VAR_azure_devops_project_name`
+- local `terraform.tfvars` only for optional developer debugging
 
 ##### 3. Azure DevOps PAT
 

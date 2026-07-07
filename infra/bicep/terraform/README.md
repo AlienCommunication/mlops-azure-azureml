@@ -98,6 +98,35 @@ terraform validate
 terraform plan
 ```
 
+## CI/CD Variable Strategy
+
+For Azure DevOps pipeline execution, do not assume a checked-in or locally-created `terraform.tfvars` file exists.
+
+Preferred production pattern:
+
+1. store secrets in Azure Key Vault
+2. expose those secrets into Azure DevOps through Key Vault-backed variable groups or secret pipeline variables
+3. store non-secret Terraform inputs in Azure DevOps variable groups using `TF_VAR_...` names
+4. run Terraform without depending on `-var-file=terraform.tfvars`
+
+Examples of non-secret Azure DevOps variables:
+
+- `TF_VAR_subscription_id`
+- `TF_VAR_subscription_name`
+- `TF_VAR_tenant_id`
+- `TF_VAR_location`
+- `TF_VAR_prefix`
+- `TF_VAR_registry_name`
+- `TF_VAR_azure_devops_org_service_url`
+- `TF_VAR_azure_devops_project_name`
+- `TF_VAR_service_connection_name`
+- `TF_VAR_azure_auth_mode`
+
+Examples of secret Azure-hosted inputs:
+
+- `AZURE_DEVOPS_PAT`
+- `TF_VAR_service_principal_key` if secret-based ARM connection mode is used
+
 ## Terraform Version Requirement
 
 This project requires:
@@ -158,7 +187,7 @@ Only continue to `terraform init` after the version check passes.
 ## Suggested Execution Order
 
 1. create Terraform backend and state location
-2. fill `terraform.tfvars`
+2. define Azure-hosted Terraform inputs in Azure DevOps variables, variable groups, and Key Vault
 3. run `terraform init`
 4. run `terraform plan`
 5. run `terraform apply`
