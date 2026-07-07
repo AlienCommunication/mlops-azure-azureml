@@ -22,10 +22,10 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r azure-mlops/requirements.txt
+          pip install -r mlops-azure-azureml/requirements.txt
       - name: Generate training data
-        run: python azure-mlops/data/generate_used_car_data.py --rows 10000 --output azure-mlops/data/used_cars.csv
+        run: python mlops-azure-azureml/data/generate_used_car_data.py --rows 10000 --output mlops-azure-azureml/data/used_cars.csv
       - name: Submit Azure ML pipeline
         run: |
-          cd azure-mlops
+          cd mlops-azure-azureml
           PYTHONPATH=. python pipelines/submit_training_pipeline.py --env dev --data data/used_cars.csv
