@@ -2,6 +2,8 @@
 
 Use GitHub for source control and Azure DevOps for enterprise CI/CD orchestration.
 
+GitHub Actions is retained only for lightweight repository CI validation. Model delivery and infrastructure delivery should run through Azure DevOps.
+
 ## Recommended Pipelines
 
 ### Terraform Infrastructure Pipeline
@@ -68,3 +70,18 @@ Use a secret pipeline variable for:
 2. verify the platform foundation exists
 3. run the ML delivery pipeline
 4. use Azure DevOps environment approvals before apply and prod deployment
+
+## GitHub Actions Scope
+
+Keep GitHub Actions only for repository CI such as:
+
+- dependency installation validation
+- local smoke validation
+- fast pull request feedback
+
+Do not use GitHub Actions as the primary production CD path for:
+
+- infrastructure apply
+- AML training promotion flow
+- test deployment
+- prod deployment

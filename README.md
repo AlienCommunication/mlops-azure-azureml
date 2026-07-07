@@ -14,6 +14,7 @@ It is designed to show how an enterprise setup is structured end to end:
 - Responsible AI review
 - Azure DevOps based CI/CD with GitHub as source control
 - Terraform-first infrastructure provisioning across Azure and Azure DevOps
+- GitHub Actions retained for lightweight CI only; Azure DevOps is the primary CD path
 
 This README is the main onboarding guide. A new engineer should be able to understand the system from here before going deeper into the supporting docs.
 
@@ -901,4 +902,5 @@ Do not treat them as the normal production operating flow.
 - This project is intentionally Azure ML SDK v2 centered.
 - The model implementation uses scikit-learn `RandomForestRegressor` for portability.
 - GitHub is the source-control system; Azure DevOps is the intended enterprise CI/CD engine.
+- GitHub Actions should be limited to repository CI validation, while Azure DevOps owns infrastructure apply and AML delivery.
 - The Terraform, Bicep fallback, and pipeline assets are opinionated starters and should be aligned with your landing zone, networking, and governance standards.
