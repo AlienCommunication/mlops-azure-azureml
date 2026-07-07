@@ -22,15 +22,13 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r azure-mlops/requirements.txt
+          pip install -r requirements.txt
       - name: Deploy to test
         run: |
-          cd azure-mlops
           PYTHONPATH=. python pipelines/deploy_model.py --env test --model-name $MODEL_NAME --model-version $MODEL_VERSION --source registry
 
       - name: Smoke test test endpoint
         run: |
-          cd azure-mlops
           PYTHONPATH=. python pipelines/smoke_test_endpoint.py --env test
 
   deploy-prod:
@@ -52,8 +50,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r azure-mlops/requirements.txt
+          pip install -r requirements.txt
       - name: Deploy to prod
         run: |
-          cd azure-mlops
           PYTHONPATH=. python pipelines/deploy_model.py --env prod --model-name $MODEL_NAME --model-version $MODEL_VERSION --source registry

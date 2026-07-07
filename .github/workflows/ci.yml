@@ -17,12 +17,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -r azure-mlops/requirements.txt
+          pip install -r requirements.txt
       - name: Generate sample data
-        run: python azure-mlops/data/generate_used_car_data.py --rows 1000 --output azure-mlops/data/used_cars_ci.csv
+        run: python data/generate_used_car_data.py --rows 1000 --output data/used_cars_ci.csv
       - name: Smoke train
         run: |
-          cd azure-mlops
           PYTHONPATH=. python -m src.train \
             --train_data data/used_cars_ci.csv \
             --model_output outputs/model \
