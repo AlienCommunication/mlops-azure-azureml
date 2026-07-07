@@ -10,7 +10,7 @@ schedules:
 
 variables:
   pythonVersion: '3.10'
-  projectRoot: 'azure-mlops'
+  projectRoot: '.'
   serviceConnection: 'az-mlops-sc'
 
 stages:

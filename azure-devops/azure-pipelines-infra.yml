@@ -4,8 +4,8 @@ trigger:
       - main
   paths:
     include:
-      - azure-mlops/infra/terraform/*
-      - azure-mlops/azure-devops/azure-pipelines-infra.yml
+      - infra/terraform/*
+      - azure-devops/azure-pipelines-infra.yml
 
 pr:
   branches:
@@ -13,13 +13,13 @@ pr:
       - main
   paths:
     include:
-      - azure-mlops/infra/terraform/*
-      - azure-mlops/azure-devops/azure-pipelines-infra.yml
+      - infra/terraform/*
+      - azure-devops/azure-pipelines-infra.yml
 
 variables:
   terraformVersion: '1.9.8'
-  projectRoot: 'azure-mlops'
-  terraformRoot: 'azure-mlops/infra/terraform'
+  projectRoot: '.'
+  terraformRoot: 'infra/terraform'
   tfVarsFile: 'terraform.tfvars'
 
 stages:

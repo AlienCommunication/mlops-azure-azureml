@@ -10,7 +10,7 @@ pr:
 
 variables:
   pythonVersion: '3.10'
-  projectRoot: 'azure-mlops'
+  projectRoot: '.'
   serviceConnection: 'az-mlops-sc'
   location: 'eastus'
   modelName: 'used-car-price-model'
