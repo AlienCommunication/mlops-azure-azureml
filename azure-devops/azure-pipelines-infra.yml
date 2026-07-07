@@ -4,7 +4,7 @@ trigger:
       - main
   paths:
     include:
-      - infra/terraform/*
+      - infra/bicep/terraform/*
       - azure-devops/azure-pipelines-infra.yml
 
 pr:
@@ -13,13 +13,13 @@ pr:
       - main
   paths:
     include:
-      - infra/terraform/*
+      - infra/bicep/terraform/*
       - azure-devops/azure-pipelines-infra.yml
 
 variables:
   terraformVersion: '1.9.8'
   projectRoot: '.'
-  terraformRoot: 'infra/terraform'
+  terraformRoot: 'infra/bicep/terraform'
   tfVarsFile: 'terraform.tfvars'
 
 stages:
