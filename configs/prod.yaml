@@ -1,0 +1,94 @@
+name: prod
+subscription_id: ${AZURE_SUBSCRIPTION_ID}
+resource_group: rg-aml-prod
+workspace_name: aml-ws-prod
+location: eastus
+registry_name: aml-enterprise-registry
+model_name: used-car-price-model
+compute:
+  cpu_cluster: cpu-cluster-prod
+  inference_cluster: null
+  deployment_compute: null
+storage:
+  datastore_name: workspaceblobstore
+deployment:
+  endpoint_name: used-car-price-prod
+  deployment_name: blue
+  instance_type: Standard_DS3_v2
+  instance_count: 2
+monitoring:
+  application_insights_enabled: true
+  data_drift_baseline_days: 30
+  latency_threshold_ms: 400
+  error_rate_threshold: 0.02
+  performance:
+    regression_metric: rmse
+    rmse_threshold: 4500
+    mae_threshold: 3500
+    monitoring_window_days: 14
+  input_data_quality:
+    required_columns:
+      - brand
+      - year
+      - mileage
+      - engine_size
+      - fuel_type
+      - transmission
+      - owner_count
+      - service_history_score
+      - accident_count
+    categorical_columns:
+      - brand
+      - fuel_type
+      - transmission
+    numerical_bounds:
+      year:
+        min: 2000
+        max: 2030
+      mileage:
+        min: 0
+        max: 300000
+      engine_size:
+        min: 0.8
+        max: 6.5
+      owner_count:
+        min: 1
+        max: 8
+      service_history_score:
+        min: 0
+        max: 100
+      accident_count:
+        min: 0
+        max: 10
+  drift:
+    important_features:
+      - mileage
+      - year
+      - engine_size
+      - fuel_type
+      - brand
+      - service_history_score
+      - accident_count
+    data_drift_thresholds:
+      numerical_jensen_shannon_distance: 0.08
+      categorical_chi_squared: 0.03
+    prediction_drift_threshold:
+      numerical_jensen_shannon_distance: 0.08
+  actions:
+    severe_data_quality: alert_only
+    sustained_data_drift: retrain_candidate
+    sustained_performance_drop: retrain_candidate
+    prod_auto_deploy: false
+  responsible_ai:
+    cohort_features:
+      - brand
+      - fuel_type
+      - year
+      - transmission
+    enable_error_analysis: true
+    enable_feature_importance: true
+    enable_counterfactuals: true
+tags:
+  environment: prod
+  project: azure-mlops
+  use_case: used-car-price

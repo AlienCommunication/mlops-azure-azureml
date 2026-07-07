@@ -1,0 +1,44 @@
+trigger: none
+
+schedules:
+  - cron: "15 3 * * *"
+    displayName: Daily production monitor review
+    branches:
+      include:
+        - main
+    always: true
+
+variables:
+  pythonVersion: '3.10'
+  projectRoot: 'azure-mlops'
+  serviceConnection: 'az-mlops-sc'
+
+stages:
+  - stage: Monitor_Prod
+    displayName: Monitor Production Endpoint
+    jobs:
+      - job: monitoring_review
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r $(projectRoot)/requirements.txt
+            displayName: Install dependencies
+          - task: AzureCLI@2
+            displayName: Materialize monitoring configuration
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                cd $(projectRoot)
+                PYTHONPATH=. python pipelines/generate_monitoring_config.py \
+                  --env prod \
+                  --output monitoring/generated-prod-config.json
+          - publish: $(Build.SourcesDirectory)/$(projectRoot)/monitoring/generated-prod-config.json
+            artifact: monitoring-config

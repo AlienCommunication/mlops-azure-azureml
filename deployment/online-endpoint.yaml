@@ -1,0 +1,7 @@
+$schema: https://azuremlschemas.azureedge.net/latest/managedOnlineEndpoint.schema.json
+name: used-car-price
+auth_mode: key
+description: Managed online endpoint for used car price prediction
+tags:
+  project: azure-mlops
+  use_case: used-car-price

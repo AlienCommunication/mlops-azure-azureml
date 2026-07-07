@@ -1,0 +1,86 @@
+$schema: http://azureml/sdk-2-0/Schedule.json
+name: used-car-prod-monitoring
+display_name: Used car price production monitoring
+description: Production monitoring for used car price regression endpoint
+trigger:
+  type: recurrence
+  frequency: day
+  interval: 1
+  schedule:
+    hours: 3
+    minutes: 15
+
+create_monitor:
+  compute:
+    instance_type: standard_e4s_v3
+    runtime_version: "3.4"
+
+  monitoring_target:
+    ml_task: regression
+    endpoint_deployment_id: azureml:used-car-price-prod:blue
+
+  monitoring_signals:
+    used_car_data_drift:
+      type: data_drift
+      reference_data:
+        input_data:
+          path: azureml:used-car-training-reference:1
+          type: mltable
+        data_context: training
+        data_column_names:
+          target_column: price
+      features:
+        - mileage
+        - year
+        - engine_size
+        - fuel_type
+        - brand
+        - service_history_score
+        - accident_count
+      alert_enabled: true
+      metric_thresholds:
+        numerical:
+          jensen_shannon_distance: 0.08
+        categorical:
+          pearsons_chi_squared_test: 0.03
+
+    used_car_prediction_drift:
+      type: prediction_drift
+      reference_data:
+        input_data:
+          path: azureml:used-car-training-reference:1
+          type: mltable
+        data_context: training
+        data_column_names:
+          target_column: price
+      alert_enabled: true
+      metric_thresholds:
+        numerical:
+          jensen_shannon_distance: 0.08
+
+    used_car_data_quality:
+      type: data_quality
+      reference_data:
+        input_data:
+          path: azureml:used-car-training-reference:1
+          type: mltable
+        data_context: training
+      features:
+        - mileage
+        - year
+        - engine_size
+        - brand
+        - fuel_type
+        - transmission
+      alert_enabled: true
+      metric_thresholds:
+        numerical:
+          null_value_rate: 0.03
+          out_of_bounds_rate: 0.03
+        categorical:
+          null_value_rate: 0.02
+          out_of_bounds_rate: 0.01
+
+  alert_notification:
+    emails:
+      - mlops-alerts@example.com

@@ -1,0 +1,25 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: evaluate_used_car_model
+display_name: Evaluate Used Car Price Model
+version: 1
+type: command
+code: ../../
+environment: azureml:used-car-training-env@latest
+command: >-
+  python -m src.evaluate
+  --metrics_input ${{inputs.metrics_input}}
+  --evaluation_output ${{outputs.evaluation_output}}
+  --rmse_threshold ${{inputs.rmse_threshold}}
+  --r2_threshold ${{inputs.r2_threshold}}
+inputs:
+  metrics_input:
+    type: uri_file
+  rmse_threshold:
+    type: number
+    default: 5000
+  r2_threshold:
+    type: number
+    default: 0.8
+outputs:
+  evaluation_output:
+    type: uri_file

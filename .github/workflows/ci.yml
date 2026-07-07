@@ -1,0 +1,29 @@
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r azure-mlops/requirements.txt
+      - name: Generate sample data
+        run: python azure-mlops/data/generate_used_car_data.py --rows 1000 --output azure-mlops/data/used_cars_ci.csv
+      - name: Smoke train
+        run: |
+          cd azure-mlops
+          PYTHONPATH=. python -m src.train \
+            --train_data data/used_cars_ci.csv \
+            --model_output outputs/model \
+            --metrics_output outputs/metrics.json

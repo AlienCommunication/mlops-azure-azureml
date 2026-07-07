@@ -1,0 +1,26 @@
+subscription_id                 = "5c6c4978-12d9-43e0-8ba4-9fb538eb1e64"
+subscription_name               = "DemoPay"
+tenant_id                       = "b6cb2304-83e3-47be-8adb-f6bb37058d52"
+location                        = "eastus"
+prefix                          = "usedcar"
+registry_name                   = "aml-enterprise-registry"
+create_registry                 = true
+enable_private_networking       = true
+self_hosted_agents_enabled      = true
+vnet_address_space              = ["10.20.0.0/16"]
+private_endpoints_subnet_prefix = "10.20.1.0/24"
+agents_subnet_prefix            = "10.20.2.0/24"
+
+azure_devops_org_service_url = "https://dev.azure.com/genaidevops0"
+azure_devops_project_name    = "mlops1"
+service_connection_name      = "az-mlops-sc"
+existing_service_endpoint_id = null
+azure_auth_mode              = "workload_identity_federation"
+
+# Do not hardcode the PAT in this file for real use.
+# Prefer:
+# export TF_VAR_azure_devops_pat='your-pat'
+
+# Only needed if you deliberately choose secret-based ARM service connection creation.
+service_principal_id  = "placeholder-if-not-used"
+service_principal_key = "placeholder-if-not-used"

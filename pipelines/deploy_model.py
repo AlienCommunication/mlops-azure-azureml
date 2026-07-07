@@ -1,0 +1,65 @@
+from __future__ import annotations
+
+import argparse
+
+from azure.ai.ml.entities import CodeConfiguration, ManagedOnlineDeployment, ManagedOnlineEndpoint
+
+from src.azure_auth import get_ml_client, get_registry_client
+from src.config import load_env_config
+
+
+def deploy(env_name: str, model_name: str, model_version: str, source: str) -> None:
+    config = load_env_config(env_name)
+    ml_client = get_ml_client(config)
+    registry_client = get_registry_client(config) if source == "registry" else None
+
+    endpoint_name = config["deployment"]["endpoint_name"]
+    deployment_name = config["deployment"]["deployment_name"]
+    model_ref = f"azureml:{model_name}:{model_version}"
+
+    if source == "registry":
+        registry_client.models.get(name=model_name, version=model_version)
+        model_ref = f"azureml://registries/{config['registry_name']}/models/{model_name}/versions/{model_version}"
+    else:
+        ml_client.models.get(name=model_name, version=model_version)
+
+    endpoint = ManagedOnlineEndpoint(
+        name=endpoint_name,
+        description=f"Used car price endpoint for {env_name}",
+        auth_mode="key",
+        tags=config["tags"],
+    )
+    ml_client.online_endpoints.begin_create_or_update(endpoint).result()
+
+    deployment = ManagedOnlineDeployment(
+        name=deployment_name,
+        endpoint_name=endpoint_name,
+        model=model_ref,
+        code_configuration=CodeConfiguration(code=".", scoring_script="src/score.py"),
+        environment="azureml:used-car-training-env@latest",
+        instance_type=config["deployment"]["instance_type"],
+        instance_count=config["deployment"]["instance_count"],
+    )
+
+    ml_client.online_deployments.begin_create_or_update(deployment).result()
+    ml_client.online_endpoints.begin_update(
+        ManagedOnlineEndpoint(
+            name=endpoint_name,
+            traffic={deployment_name: 100},
+        )
+    ).result()
+    print(f"Deployed {model_name}:{model_version} to {endpoint_name}/{deployment_name}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--env", required=True, choices=["dev", "test", "prod"])
+    parser.add_argument("--model-name", required=True)
+    parser.add_argument("--model-version", required=True)
+    parser.add_argument("--source", choices=["workspace", "registry"], default="registry")
+    args = parser.parse_args()
+    deploy(args.env, args.model_name, args.model_version, args.source)
+
+
+if __name__ == "__main__":
+    main()

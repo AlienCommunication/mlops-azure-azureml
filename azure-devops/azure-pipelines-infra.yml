@@ -1,0 +1,111 @@
+trigger:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - azure-mlops/infra/terraform/*
+      - azure-mlops/azure-devops/azure-pipelines-infra.yml
+
+pr:
+  branches:
+    include:
+      - main
+  paths:
+    include:
+      - azure-mlops/infra/terraform/*
+      - azure-mlops/azure-devops/azure-pipelines-infra.yml
+
+variables:
+  terraformVersion: '1.9.8'
+  projectRoot: 'azure-mlops'
+  terraformRoot: 'azure-mlops/infra/terraform'
+  tfVarsFile: 'terraform.tfvars'
+
+stages:
+  - stage: Terraform_Validate_And_Plan
+    displayName: Terraform Validate And Plan
+    jobs:
+      - job: terraform_plan
+        displayName: Terraform Plan
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+
+          - task: TerraformInstaller@1
+            displayName: Install Terraform
+            inputs:
+              terraformVersion: '$(terraformVersion)'
+
+          - script: |
+              terraform fmt -check -recursive
+            workingDirectory: $(terraformRoot)
+            displayName: Terraform fmt check
+
+          - script: |
+              terraform init
+            workingDirectory: $(terraformRoot)
+            env:
+              TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
+            displayName: Terraform init
+
+          - script: |
+              terraform validate
+            workingDirectory: $(terraformRoot)
+            env:
+              TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
+            displayName: Terraform validate
+
+          - script: |
+              terraform plan -var-file=$(tfVarsFile) -out=tfplan
+            workingDirectory: $(terraformRoot)
+            env:
+              TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
+            displayName: Terraform plan
+
+          - task: PublishPipelineArtifact@1
+            displayName: Publish Terraform plan
+            inputs:
+              targetPath: '$(terraformRoot)/tfplan'
+              artifact: 'terraform-plan'
+
+  - stage: Terraform_Apply
+    displayName: Terraform Apply
+    dependsOn: Terraform_Validate_And_Plan
+    condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))
+    jobs:
+      - deployment: terraform_apply
+        displayName: Terraform Apply
+        environment: aml-platform-infra
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+
+                - task: TerraformInstaller@1
+                  displayName: Install Terraform
+                  inputs:
+                    terraformVersion: '$(terraformVersion)'
+
+                - task: DownloadPipelineArtifact@2
+                  displayName: Download Terraform plan
+                  inputs:
+                    artifact: 'terraform-plan'
+                    path: '$(Pipeline.Workspace)/terraform-plan'
+
+                - script: |
+                    terraform init
+                  workingDirectory: $(terraformRoot)
+                  env:
+                    TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
+                  displayName: Terraform init
+
+                - script: |
+                    cp "$(Pipeline.Workspace)/terraform-plan/tfplan" tfplan
+                    terraform apply -auto-approve tfplan
+                  workingDirectory: $(terraformRoot)
+                  env:
+                    TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
+                  displayName: Terraform apply

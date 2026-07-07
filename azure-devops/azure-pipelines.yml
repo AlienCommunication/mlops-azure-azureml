@@ -1,0 +1,204 @@
+trigger:
+  branches:
+    include:
+      - main
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  pythonVersion: '3.10'
+  projectRoot: 'azure-mlops'
+  serviceConnection: 'az-mlops-sc'
+  location: 'eastus'
+  modelName: 'used-car-price-model'
+
+stages:
+  - stage: Validate
+    displayName: Validate Code And Templates
+    jobs:
+      - job: validate
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r $(projectRoot)/requirements.txt
+            displayName: Install dependencies
+          - script: |
+              cd $(projectRoot)
+              PYTHONPATH=. python data/generate_used_car_data.py --rows 500 --output /tmp/used_cars_ci.csv
+              PYTHONPATH=. python -m src.train --train_data /tmp/used_cars_ci.csv --model_output /tmp/used-car-model --metrics_output /tmp/used-car-metrics.json
+              PYTHONPATH=. python -m src.evaluate --metrics_input /tmp/used-car-metrics.json --evaluation_output /tmp/used-car-eval.json
+            displayName: Developer smoke validation
+  - stage: Train_Dev
+    displayName: Train And Register In Dev
+    dependsOn: Validate
+    condition: succeeded()
+    jobs:
+      - job: train_dev
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r $(projectRoot)/requirements.txt
+            displayName: Install dependencies
+          - script: |
+              echo "This pipeline assumes the Terraform infra pipeline has already provisioned AML, networking, and Azure DevOps foundation resources."
+            displayName: Confirm infra prerequisite
+          - task: AzureCLI@2
+            displayName: Submit AML training pipeline
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                cd $(projectRoot)
+                PYTHONPATH=. python pipelines/submit_training_pipeline.py --env dev --data azureml:used-car-training-reference:1
+
+  - stage: Promote_To_Test
+    displayName: Promote Approved Model To Registry
+    dependsOn: Train_Dev
+    condition: succeeded()
+    jobs:
+      - deployment: promote_model
+        environment: aml-test-approval
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: UsePythonVersion@0
+                  inputs:
+                    versionSpec: '$(pythonVersion)'
+                - script: |
+                    python -m pip install --upgrade pip
+                    pip install -r $(projectRoot)/requirements.txt
+                  displayName: Install dependencies
+                - task: AzureCLI@2
+                  displayName: Promote workspace model to registry
+                  inputs:
+                    azureSubscription: '$(serviceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      cd $(projectRoot)
+                      PYTHONPATH=. python pipelines/promote_model.py \
+                        --env dev \
+                        --model-name $(modelName) \
+                        --workspace-model-version $(WORKSPACE_MODEL_VERSION)
+
+  - stage: Deploy_Test
+    displayName: Deploy To Test
+    dependsOn: Promote_To_Test
+    condition: succeeded()
+    jobs:
+      - deployment: deploy_test
+        environment: aml-test
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: UsePythonVersion@0
+                  inputs:
+                    versionSpec: '$(pythonVersion)'
+                - script: |
+                    python -m pip install --upgrade pip
+                    pip install -r $(projectRoot)/requirements.txt
+                  displayName: Install dependencies
+                - task: AzureCLI@2
+                  displayName: Deploy registry model to test
+                  inputs:
+                    azureSubscription: '$(serviceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      cd $(projectRoot)
+                      PYTHONPATH=. python pipelines/deploy_model.py \
+                        --env test \
+                        --model-name $(modelName) \
+                        --model-version $(REGISTRY_MODEL_VERSION) \
+                        --source registry
+                - task: AzureCLI@2
+                  displayName: Smoke test test endpoint
+                  inputs:
+                    azureSubscription: '$(serviceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      cd $(projectRoot)
+                      PYTHONPATH=. python pipelines/smoke_test_endpoint.py --env test
+
+  - stage: Deploy_Prod
+    displayName: Deploy To Prod
+    dependsOn: Deploy_Test
+    condition: succeeded()
+    jobs:
+      - deployment: deploy_prod
+        environment: aml-prod
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: self
+                - task: UsePythonVersion@0
+                  inputs:
+                    versionSpec: '$(pythonVersion)'
+                - script: |
+                    python -m pip install --upgrade pip
+                    pip install -r $(projectRoot)/requirements.txt
+                  displayName: Install dependencies
+                - task: AzureCLI@2
+                  displayName: Deploy registry model to prod
+                  inputs:
+                    azureSubscription: '$(serviceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      cd $(projectRoot)
+                      PYTHONPATH=. python pipelines/deploy_model.py \
+                        --env prod \
+                        --model-name $(modelName) \
+                        --model-version $(REGISTRY_MODEL_VERSION) \
+                        --source registry
+
+  - stage: Configure_Monitoring
+    displayName: Configure Monitoring Assets
+    dependsOn: Deploy_Prod
+    condition: succeeded()
+    jobs:
+      - job: monitoring
+        pool:
+          vmImage: 'ubuntu-latest'
+        steps:
+          - checkout: self
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: '$(pythonVersion)'
+          - script: |
+              python -m pip install --upgrade pip
+              pip install -r $(projectRoot)/requirements.txt
+            displayName: Install dependencies
+          - task: AzureCLI@2
+            displayName: Generate monitoring policy
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                cd $(projectRoot)
+                PYTHONPATH=. python pipelines/generate_monitoring_config.py \
+                  --env prod \
+                  --output monitoring/generated-prod-config.json

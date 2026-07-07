@@ -1,0 +1,15 @@
+{
+  "record_id": "used-car-000001",
+  "event_timestamp": "2026-07-07T10:15:00Z",
+  "brand": "Toyota",
+  "year": 2020,
+  "mileage": 35000,
+  "engine_size": 1.8,
+  "fuel_type": "Hybrid",
+  "transmission": "Automatic",
+  "owner_count": 1,
+  "service_history_score": 92,
+  "accident_count": 0,
+  "predicted_price": 987654.32,
+  "actual_price": null
+}

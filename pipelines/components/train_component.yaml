@@ -1,0 +1,32 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: train_used_car_model
+display_name: Train Used Car Price Model
+version: 1
+type: command
+code: ../../
+environment: azureml:used-car-training-env@latest
+command: >-
+  python -m src.train
+  --train_data ${{inputs.train_data}}
+  --model_output ${{outputs.model_output}}
+  --metrics_output ${{outputs.metrics_output}}
+  --n_estimators ${{inputs.n_estimators}}
+  --max_depth ${{inputs.max_depth}}
+  --min_samples_split ${{inputs.min_samples_split}}
+inputs:
+  train_data:
+    type: uri_file
+  n_estimators:
+    type: integer
+    default: 250
+  max_depth:
+    type: integer
+    default: 16
+  min_samples_split:
+    type: integer
+    default: 2
+outputs:
+  model_output:
+    type: uri_folder
+  metrics_output:
+    type: uri_file

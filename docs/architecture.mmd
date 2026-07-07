@@ -1,0 +1,18 @@
+flowchart LR
+    A["Enterprise Git Repo"] --> B["GitHub Actions CI"]
+    B --> C["Dev Workspace"]
+    C --> D["Training Pipeline"]
+    D --> E["Evaluation Gate"]
+    E --> F["Workspace Model"]
+    F --> G["Central AML Registry"]
+    G --> H["Test Deployment"]
+    H --> I["Smoke Tests / Approval"]
+    I --> J["Prod Deployment"]
+    J --> K["Managed Online Endpoint"]
+    K --> L["Azure Monitor / App Insights"]
+    L --> M["Alert / Event Grid / Schedule"]
+    M --> D
+
+    N["ADLS / Blob / Datastore"] --> D
+    O["AML Components / Environments"] --> D
+    P["CPU / GPU Compute"] --> D
