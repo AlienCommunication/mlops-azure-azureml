@@ -14,6 +14,113 @@ Use Azure DevOps service connections with one of these patterns:
 
 Preferred order is exactly as listed above.
 
+## Current State In This Repo
+
+There are two separate ideas in this setup:
+
+1. `target-state production identity model`
+2. `bootstrap identity used to get the platform unstuck`
+
+Target state:
+
+- Azure DevOps should use workload identity federation for Azure access
+- Azure ML resources should use managed identities where possible
+- Azure DevOps PAT usage should be limited to Terraform bootstrap for Azure DevOps object management
+
+Bootstrap state used in this tenant:
+
+- the Azure DevOps portal would not save the WIF-based Azure Resource Manager service connection
+- because of that UI blocker, a temporary Azure service principal was created in Azure
+- that service principal is used only to create a bootstrap Azure RM service connection named `az-mlops-sc`
+- this is a temporary workaround, not the long-term preferred identity pattern
+
+So yes: at this exact bootstrap stage, the Azure service connection is temporarily not using WIF.
+
+That does not mean the architecture abandoned WIF.
+It means we are using a secret-based bootstrap connection because the Azure DevOps UI path for WIF was blocked in this tenant.
+
+## Why We Ran `az ad sp create-for-rbac`
+
+We ran:
+
+```bash
+az ad sp create-for-rbac \
+  --name usedcar-ado-bootstrap-sp \
+  --role Contributor \
+  --scopes /subscriptions/5c6c4978-12d9-43e0-8ba4-9fb538eb1e64
+```
+
+Why:
+
+- Azure DevOps needed an Azure identity it could use for the infrastructure pipeline
+- the intended WIF-based service connection could not be created from the portal because the `Save` flow was failing
+- the Azure DevOps CLI fallback for Azure RM service connections expects a service principal
+- this command creates that bootstrap service principal and assigns it Azure RBAC on the subscription
+
+What each part means:
+
+- `az ad sp create-for-rbac`
+  Creates an Entra application/service principal and also assigns an Azure RBAC role.
+- `--name usedcar-ado-bootstrap-sp`
+  Human-readable identity name for the bootstrap Azure DevOps connection.
+- `--role Contributor`
+  Grants the identity permission to create and update most Azure resources in scope.
+- `--scopes /subscriptions/5c6c4978-12d9-43e0-8ba4-9fb538eb1e64`
+  Limits the RBAC assignment to the `DemoPay` subscription instead of all subscriptions.
+
+What the output values mean:
+
+- `appId`
+  The client ID of the Entra application. Azure DevOps uses this to identify the service principal.
+- `password`
+  The client secret. Azure DevOps CLI uses this to create the bootstrap Azure RM service connection.
+- `tenant`
+  The Microsoft Entra tenant ID where the application lives.
+- `displayName`
+  The friendly name of the identity.
+
+Important:
+
+- the client secret is sensitive
+- if it has been pasted in chat or stored in shell history, rotate it before production use
+- do not commit it to the repo
+
+## What This Bootstrap Service Principal Is For
+
+This bootstrap service principal is not the model-serving identity.
+It is not the AML training identity.
+It is not the online endpoint managed identity.
+
+It is only for:
+
+- Azure DevOps infrastructure pipeline access to Azure
+- creation and update of Azure platform resources during Terraform bootstrap
+
+## What It Is Not For
+
+Do not use this bootstrap service principal for:
+
+- application runtime access
+- inference requests
+- model endpoint code
+- training code inside AML jobs
+- long-term production identity if WIF can be enabled
+
+## Migration Goal Back To WIF
+
+The preferred end-state remains:
+
+1. create a workload identity federation Azure Resource Manager service connection in Azure DevOps
+2. update pipeline references so Azure DevOps uses that WIF service connection for Azure access
+3. verify infra and ML pipelines still run correctly
+4. remove the bootstrap secret-based service connection
+5. delete or disable the bootstrap service principal
+
+In short:
+
+- `now`: secret-based bootstrap service connection because tenant UI is blocked
+- `target`: WIF-based Azure DevOps service connection
+
 ### Important Distinction: PAT vs Azure Service Connection Auth
 
 Two different credentials can exist in this setup:

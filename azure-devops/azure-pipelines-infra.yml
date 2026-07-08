@@ -24,6 +24,8 @@ variables:
     value: '.'
   - name: terraformRoot
     value: 'infra/bicep/terraform'
+  - name: bootstrapAzureServiceConnection
+    value: 'az-mlops-sc'
 
 stages:
   - stage: Terraform_Validate_And_Plan
@@ -46,23 +48,17 @@ stages:
             workingDirectory: $(terraformRoot)
             displayName: Terraform fmt check
 
-          - script: |
-              terraform init
-            workingDirectory: $(terraformRoot)
-            env:
-              TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
-            displayName: Terraform init
-
-          - script: |
-              terraform validate
-            workingDirectory: $(terraformRoot)
-            env:
-              TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
-            displayName: Terraform validate
-
-          - script: |
-              terraform plan -out=tfplan
-            workingDirectory: $(terraformRoot)
+          - task: AzureCLI@2
+            displayName: Terraform init, validate, and plan
+            inputs:
+              azureSubscription: '$(bootstrapAzureServiceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                cd "$(terraformRoot)"
+                terraform init
+                terraform validate
+                terraform plan -out=tfplan
             env:
               TF_VAR_subscription_id: $(TF_VAR_subscription_id)
               TF_VAR_subscription_name: $(TF_VAR_subscription_name)
@@ -84,7 +80,6 @@ stages:
               TF_VAR_service_principal_id: $(TF_VAR_service_principal_id)
               TF_VAR_service_principal_key: $(TF_VAR_service_principal_key)
               TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
-            displayName: Terraform plan
 
           - task: PublishPipelineArtifact@1
             displayName: Publish Terraform plan
@@ -117,17 +112,17 @@ stages:
                     artifact: 'terraform-plan'
                     path: '$(Pipeline.Workspace)/terraform-plan'
 
-                - script: |
-                    terraform init
-                  workingDirectory: $(terraformRoot)
-                  env:
-                    TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
-                  displayName: Terraform init
-
-                - script: |
-                    cp "$(Pipeline.Workspace)/terraform-plan/tfplan" tfplan
-                    terraform apply -auto-approve tfplan
-                  workingDirectory: $(terraformRoot)
+                - task: AzureCLI@2
+                  displayName: Terraform apply
+                  inputs:
+                    azureSubscription: '$(bootstrapAzureServiceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      cd "$(terraformRoot)"
+                      terraform init
+                      cp "$(Pipeline.Workspace)/terraform-plan/tfplan" tfplan
+                      terraform apply -auto-approve tfplan
                   env:
                     TF_VAR_subscription_id: $(TF_VAR_subscription_id)
                     TF_VAR_subscription_name: $(TF_VAR_subscription_name)
@@ -149,4 +144,3 @@ stages:
                     TF_VAR_service_principal_id: $(TF_VAR_service_principal_id)
                     TF_VAR_service_principal_key: $(TF_VAR_service_principal_key)
                     TF_VAR_azure_devops_pat: $(AZURE_DEVOPS_PAT)
-                  displayName: Terraform apply

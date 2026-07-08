@@ -35,14 +35,27 @@ Use [azure-pipelines-monitoring.yml](/Users/amit/Desktop/Code%201_pers/PersonalP
 
 Create Azure DevOps Environments:
 
+- `aml-platform-infra`
 - `aml-test-approval`
 - `aml-test`
 - `aml-prod`
 
 Use approval gates on:
 
+- `aml-platform-infra`
 - `aml-test-approval`
 - `aml-prod`
+
+## Bootstrap Service Connection
+
+Create an Azure Resource Manager service connection for the infrastructure pipeline:
+
+- name: `az-mlops-sc`
+- recommended auth: `Workload identity federation`
+- recommended scope: `Subscription`
+- current tenant subscription: `DemoPay`
+
+This service connection is used so Azure DevOps can authenticate to Azure before Terraform runs.
 
 ## GitHub Integration
 

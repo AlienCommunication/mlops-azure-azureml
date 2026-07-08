@@ -488,6 +488,14 @@ Preferred production pattern:
 - define non-secret Terraform inputs in Azure DevOps using `TF_VAR_...` variables
 - avoid making CI/CD depend on a developer-local `terraform.tfvars`
 
+Bootstrap objects to create in Azure DevOps before the infra pipeline can succeed:
+
+- pipeline from `azure-devops/azure-pipelines-infra.yml`
+- Azure service connection `az-mlops-sc`
+- Library variable group `aml-infra-tfvars`
+- secret pipeline variable `AZURE_DEVOPS_PAT`
+- environment `aml-platform-infra`
+
 Where to place them in Azure DevOps:
 
 - `Pipelines -> Library -> Variable groups`
@@ -640,6 +648,7 @@ Important:
 
 - the Azure DevOps PAT is only for Terraform-to-Azure-DevOps bootstrap
 - workload identity federation is for Azure DevOps pipeline access to Azure
+- if the Azure DevOps portal cannot save a WIF service connection, use a temporary CLI-created bootstrap Azure RM connection and then migrate later
 
 What this repo currently expects in the Terraform starter:
 

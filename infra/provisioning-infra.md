@@ -265,6 +265,66 @@ If you are not yet applying the Terraform DevOps layer, do this manually in Azur
    - `aml-test-approval`
    - `aml-prod`
 
+## If Azure DevOps UI Cannot Save The Azure Service Connection
+
+In some tenants, the Azure DevOps portal may let you fill the Azure Resource Manager service connection form but silently fail when `Save` is clicked.
+
+When that happens, use a CLI bootstrap path:
+
+1. create a dedicated bootstrap service principal in Azure
+2. create the Azure DevOps ARM service connection from CLI
+3. store the resulting service connection ID in Azure DevOps as `TF_VAR_existing_service_endpoint_id`
+4. run the infrastructure pipeline again
+
+Why this is acceptable:
+
+- this is a bootstrap workaround for a blocked tenant/UI flow
+- it unblocks infra provisioning without changing the overall enterprise architecture
+- the intended long-term model is still workload identity federation for Azure DevOps-to-Azure auth
+
+Recommended bootstrap commands:
+
+```bash
+az ad sp create-for-rbac \
+  --name usedcar-ado-bootstrap-sp \
+  --role Contributor \
+  --scopes /subscriptions/5c6c4978-12d9-43e0-8ba4-9fb538eb1e64
+```
+
+Then:
+
+```bash
+export AZURE_DEVOPS_EXT_PAT="<fresh-azure-devops-pat>"
+export AZURE_DEVOPS_EXT_AZURE_RM_SERVICE_PRINCIPAL_KEY="<service-principal-secret>"
+
+az devops service-endpoint azurerm create \
+  --organization "https://dev.azure.com/genaidevops0" \
+  --project "mlops1" \
+  --azure-rm-service-principal-id "<appId>" \
+  --azure-rm-subscription-id "5c6c4978-12d9-43e0-8ba4-9fb538eb1e64" \
+  --azure-rm-subscription-name "DemoPay" \
+  --azure-rm-tenant-id "b6cb2304-83e3-47be-8adb-f6bb37058d52" \
+  --name "az-mlops-sc"
+```
+
+Then fetch the service connection ID:
+
+```bash
+az devops service-endpoint list \
+  --organization "https://dev.azure.com/genaidevops0" \
+  --project "mlops1" \
+  --query "[?name=='az-mlops-sc'].id | [0]" \
+  -o tsv
+```
+
+Use that ID in the Azure DevOps variable group as:
+
+```text
+TF_VAR_existing_service_endpoint_id=<service-connection-id>
+```
+
+This repo now treats that service connection as the bootstrap Azure identity for the Terraform infra pipeline.
+
 ## Key Vault Ownership
 
 Key Vault itself is an Azure resource, so it should be provisioned by Terraform for the preferred production path.
