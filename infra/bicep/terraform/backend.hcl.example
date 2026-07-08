@@ -1,0 +1,4 @@
+resource_group_name  = "rg-usedcar-tfstate"
+storage_account_name = "stusedcartfstate01"
+container_name       = "tfstate"
+key                  = "azureml-enterprise.tfstate"

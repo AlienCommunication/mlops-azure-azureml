@@ -26,6 +26,14 @@ variables:
     value: 'infra/bicep/terraform'
   - name: bootstrapAzureServiceConnection
     value: 'az-mlops-sc'
+  - name: terraformBackendResourceGroup
+    value: '$(TF_BACKEND_RESOURCE_GROUP)'
+  - name: terraformBackendStorageAccount
+    value: '$(TF_BACKEND_STORAGE_ACCOUNT)'
+  - name: terraformBackendContainer
+    value: '$(TF_BACKEND_CONTAINER)'
+  - name: terraformBackendKey
+    value: '$(TF_BACKEND_KEY)'
 
 stages:
   - stage: Terraform_Validate_And_Plan
@@ -56,7 +64,11 @@ stages:
               scriptLocation: inlineScript
               inlineScript: |
                 cd "$(terraformRoot)"
-                terraform init
+                terraform init \
+                  -backend-config="resource_group_name=$(terraformBackendResourceGroup)" \
+                  -backend-config="storage_account_name=$(terraformBackendStorageAccount)" \
+                  -backend-config="container_name=$(terraformBackendContainer)" \
+                  -backend-config="key=$(terraformBackendKey)"
                 terraform validate
                 terraform plan -out=tfplan
             env:
@@ -120,7 +132,11 @@ stages:
                     scriptLocation: inlineScript
                     inlineScript: |
                       cd "$(terraformRoot)"
-                      terraform init
+                      terraform init \
+                        -backend-config="resource_group_name=$(terraformBackendResourceGroup)" \
+                        -backend-config="storage_account_name=$(terraformBackendStorageAccount)" \
+                        -backend-config="container_name=$(terraformBackendContainer)" \
+                        -backend-config="key=$(terraformBackendKey)"
                       cp "$(Pipeline.Workspace)/terraform-plan/tfplan" tfplan
                       terraform apply -auto-approve tfplan
                   env:

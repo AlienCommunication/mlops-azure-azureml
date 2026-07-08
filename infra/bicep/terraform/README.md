@@ -195,6 +195,67 @@ Only continue to `terraform init` after the version check passes.
 7. verify Azure DevOps service connection, environments, and variable groups
 8. move to ML delivery only after foundation is healthy
 
+## Remote Backend Is Required For Production
+
+For production CI/CD, this Terraform must use persistent remote state.
+
+Use Azure Storage-backed state with:
+
+- dedicated resource group
+- dedicated storage account
+- dedicated blob container
+- one explicit state key per platform stack
+
+Example backend values for this tenant:
+
+```text
+TF_BACKEND_RESOURCE_GROUP=rg-usedcar-tfstate
+TF_BACKEND_STORAGE_ACCOUNT=stusedcartfstate01
+TF_BACKEND_CONTAINER=tfstate
+TF_BACKEND_KEY=azureml-enterprise.tfstate
+```
+
+An example backend config file is provided at:
+
+- [backend.hcl.example](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/azure-mlops-repo/mlops-azure-azureml/infra/bicep/terraform/backend.hcl.example)
+
+### Why This Matters
+
+Without a remote backend:
+
+- each pipeline run starts with fresh local state
+- partial applies create orphaned Azure resources
+- the next apply tries to recreate existing resources
+- recovery becomes import-heavy and brittle
+
+### Azure DevOps Variable Placement For Backend
+
+Store these backend values in Azure DevOps variable group `aml-infra-tfvars`:
+
+- `TF_BACKEND_RESOURCE_GROUP`
+- `TF_BACKEND_STORAGE_ACCOUNT`
+- `TF_BACKEND_CONTAINER`
+- `TF_BACKEND_KEY`
+
+They are configuration values, not secrets.
+
+### Recovery After Partial Apply
+
+If resources were created before remote backend was enabled:
+
+1. enable the backend first
+2. run `terraform init` against the backend
+3. import already-created resources into state
+4. rerun `terraform plan`
+5. rerun `terraform apply`
+
+Example imports for this tenant’s current partial state:
+
+```bash
+terraform import 'azurerm_resource_group.network[0]' '/subscriptions/5c6c4978-12d9-43e0-8ba4-9fb538eb1e64/resourceGroups/rg-aml-network'
+terraform import 'azurerm_resource_group.env["test"]' '/subscriptions/5c6c4978-12d9-43e0-8ba4-9fb538eb1e64/resourceGroups/rg-aml-test'
+```
+
 ## Private Networking Notes
 
 This starter now includes:

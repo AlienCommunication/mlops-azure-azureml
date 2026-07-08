@@ -245,6 +245,61 @@ TF_VAR_enable_key_vault_linked_variable_groups=false
 
 during bootstrap.
 
+## State Management Lesson From Real Pipeline Runs
+
+The early Azure DevOps pipeline runs in this tenant exposed a critical production gap:
+
+- Terraform was running without a remote backend
+- a failed `apply` created some Azure resources successfully
+- the next pipeline run started with fresh local state
+- Terraform then tried to create the same Azure resources again
+- Azure returned `already exists` errors and Terraform asked for import
+
+This is not an Azure bug.
+It is the expected behavior when CI/CD runs Terraform without persistent shared state.
+
+### What This Means
+
+Without a remote backend:
+
+- every pipeline run behaves like a fresh Terraform client
+- partial apply recovery is painful
+- import and drift correction become manual
+- the setup is not yet production-grade
+
+### Production-Correct Fix
+
+Before continuing repeated infra applies, the platform should use a remote backend, typically Azure Storage with:
+
+- a dedicated Terraform state resource group
+- a dedicated storage account
+- a blob container for state
+- an explicit state key
+
+Then all pipeline runs use the same persisted state.
+
+### Short-Term Recovery Choices
+
+If resources were partially created before the backend was added, you have two choices:
+
+1. import the already-created resources into Terraform state
+2. delete the partially-created resources and rerun after backend is fixed
+
+For production hygiene, backend-first plus import is usually the better route if you want to preserve the created assets.
+
+### Backend Values Recommended For This Tenant
+
+Use backend configuration like:
+
+```text
+TF_BACKEND_RESOURCE_GROUP=rg-usedcar-tfstate
+TF_BACKEND_STORAGE_ACCOUNT=stusedcartfstate01
+TF_BACKEND_CONTAINER=tfstate
+TF_BACKEND_KEY=azureml-enterprise.tfstate
+```
+
+These should be added to Azure DevOps variable group `aml-infra-tfvars`.
+
 ## Local Bootstrap Gate
 
 Before any provisioning work, verify the local Terraform runtime:
