@@ -87,6 +87,29 @@ This order matters because Terraform depends on:
 - non-secret inputs through `aml-infra-tfvars`
 - environment approval boundary through `aml-platform-infra`
 
+## Important Auth Detail For Terraform In Azure DevOps
+
+When Azure DevOps runs `AzureCLI@2` with a service connection, the task logs into Azure using a service principal.
+
+That does not automatically mean Terraform backend initialization can use Azure CLI auth mode.
+
+Why:
+
+- the `azurerm` backend does not support Azure CLI authentication when the CLI session is a service principal login
+- it only supports Azure CLI auth in user-login scenarios
+
+Production-correct fix:
+
+- keep using `AzureCLI@2`
+- enable `addSpnToEnvironment: true`
+- pass these environment variables into Terraform:
+  - `ARM_CLIENT_ID`
+  - `ARM_CLIENT_SECRET`
+  - `ARM_TENANT_ID`
+  - `ARM_SUBSCRIPTION_ID`
+
+This makes Terraform backend and provider authentication use explicit service principal credentials rather than Azure CLI user-mode auth assumptions.
+
 ## Recommended Execution Order
 
 1. run `azure-pipelines-infra.yml` to provision or update platform resources

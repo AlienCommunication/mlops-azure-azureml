@@ -60,6 +60,7 @@ stages:
             displayName: Terraform init, validate, and plan
             inputs:
               azureSubscription: '$(bootstrapAzureServiceConnection)'
+              addSpnToEnvironment: true
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
@@ -73,6 +74,10 @@ stages:
                 terraform validate
                 terraform plan -out=tfplan
             env:
+              ARM_CLIENT_ID: $(servicePrincipalId)
+              ARM_CLIENT_SECRET: $(servicePrincipalKey)
+              ARM_TENANT_ID: $(tenantId)
+              ARM_SUBSCRIPTION_ID: $(TF_VAR_subscription_id)
               TF_VAR_subscription_id: $(TF_VAR_subscription_id)
               TF_VAR_subscription_name: $(TF_VAR_subscription_name)
               TF_VAR_tenant_id: $(TF_VAR_tenant_id)
@@ -129,6 +134,7 @@ stages:
                   displayName: Terraform apply
                   inputs:
                     azureSubscription: '$(bootstrapAzureServiceConnection)'
+                    addSpnToEnvironment: true
                     scriptType: bash
                     scriptLocation: inlineScript
                     inlineScript: |
@@ -142,6 +148,10 @@ stages:
                       cp "$(Pipeline.Workspace)/terraform-plan/tfplan" tfplan
                       terraform apply -auto-approve tfplan
                   env:
+                    ARM_CLIENT_ID: $(servicePrincipalId)
+                    ARM_CLIENT_SECRET: $(servicePrincipalKey)
+                    ARM_TENANT_ID: $(tenantId)
+                    ARM_SUBSCRIPTION_ID: $(TF_VAR_subscription_id)
                     TF_VAR_subscription_id: $(TF_VAR_subscription_id)
                     TF_VAR_subscription_name: $(TF_VAR_subscription_name)
                     TF_VAR_tenant_id: $(TF_VAR_tenant_id)

@@ -300,6 +300,28 @@ TF_BACKEND_KEY=azureml-enterprise.tfstate
 
 These should be added to Azure DevOps variable group `aml-infra-tfvars`.
 
+### Authentication Lesson From Remote Backend In CI/CD
+
+The first backend-enabled Azure DevOps run exposed another important behavior:
+
+- `AzureCLI@2` logged into Azure successfully using the bootstrap service principal
+- Terraform backend initialization still failed
+- reason: `azurerm` backend does not support Azure CLI authentication when the CLI session is a service principal
+
+This is why the pipeline must pass explicit ARM environment variables:
+
+- `ARM_CLIENT_ID`
+- `ARM_CLIENT_SECRET`
+- `ARM_TENANT_ID`
+- `ARM_SUBSCRIPTION_ID`
+
+In this repo, the infrastructure pipeline was updated to use:
+
+- `addSpnToEnvironment: true` on `AzureCLI@2`
+- explicit `ARM_*` environment variables for Terraform
+
+This is the production-correct pattern for Terraform remote backend auth in Azure DevOps when using a service connection backed by a service principal.
+
 ## Local Bootstrap Gate
 
 Before any provisioning work, verify the local Terraform runtime:
