@@ -115,6 +115,12 @@ variable "azure_auth_mode" {
   default     = "workload_identity_federation"
 }
 
+variable "enable_key_vault_linked_variable_groups" {
+  description = "Whether Terraform should create Azure DevOps Key Vault-linked variable groups during bootstrap."
+  type        = bool
+  default     = false
+}
+
 variable "service_principal_id" {
   description = "Service principal client ID used by the ARM service connection."
   type        = string

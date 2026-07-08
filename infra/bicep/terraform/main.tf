@@ -19,7 +19,7 @@ locals {
 
   key_vault_service_endpoint_id = var.existing_service_endpoint_id != null ? var.existing_service_endpoint_id : try(azuredevops_serviceendpoint_azurerm.arm[0].id, null)
 
-  create_key_vault_linked_variable_groups = local.key_vault_service_endpoint_id != null
+  create_key_vault_linked_variable_groups = var.enable_key_vault_linked_variable_groups && local.key_vault_service_endpoint_id != null
 }
 
 resource "azurerm_resource_group" "network" {
@@ -64,6 +64,14 @@ resource "azurerm_resource_group" "env" {
   name     = each.value.resource_group_name
   location = var.location
   tags     = merge(var.tags, { environment = each.key })
+}
+
+resource "azurerm_resource_group" "shared" {
+  count = var.create_registry ? 1 : 0
+
+  name     = "rg-aml-shared"
+  location = var.location
+  tags     = merge(var.tags, { environment = "shared" })
 }
 
 resource "azurerm_storage_account" "env" {
@@ -122,7 +130,7 @@ resource "azurerm_container_registry" "env" {
   name                          = each.value.acr_name
   location                      = azurerm_resource_group.env[each.key].location
   resource_group_name           = azurerm_resource_group.env[each.key].name
-  sku                           = "Basic"
+  sku                           = var.enable_private_networking ? "Premium" : "Basic"
   admin_enabled                 = false
   public_network_access_enabled = var.enable_private_networking ? false : true
   tags                          = merge(var.tags, { environment = each.key })
@@ -160,7 +168,7 @@ resource "azapi_resource" "registry" {
 
   type      = "Microsoft.MachineLearningServices/registries@2024-04-01"
   name      = var.registry_name
-  parent_id = "/subscriptions/${var.subscription_id}"
+  parent_id = azurerm_resource_group.shared[0].id
   location  = var.location
   tags      = var.tags
 

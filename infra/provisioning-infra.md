@@ -199,6 +199,52 @@ For this tenant, the chosen direction is:
 
 ## Recommended Provisioning Sequence
 
+### Actual Bootstrap Sequence Used In This Tenant
+
+The setup path used here was:
+
+1. verify Azure subscription login with Azure CLI
+2. upgrade Terraform to a supported version
+3. create Azure DevOps project and connect the GitHub repo
+4. create the Azure DevOps infra pipeline from `azure-devops/azure-pipelines-infra.yml`
+5. create variable group `aml-infra-tfvars`
+6. add non-secret Terraform inputs to the variable group
+7. attempt to create WIF-based Azure service connection in Azure DevOps UI
+8. fall back to CLI bootstrap because the UI save flow was blocked
+9. create bootstrap service principal in Azure with `az ad sp create-for-rbac`
+10. create Azure RM service connection `az-mlops-sc` from Azure DevOps CLI
+11. capture service connection ID `ac870ddd-2ef3-4522-9ad2-7c937c2390f4`
+12. add `TF_VAR_existing_service_endpoint_id` to `aml-infra-tfvars`
+13. add secret pipeline variable `AZURE_DEVOPS_PAT`
+14. rerun the infra pipeline
+
+This sequence is now the documented tenant-tested bootstrap path for this repo.
+
+## Bootstrap Hardening Notes From First Real Apply
+
+The first real Terraform apply in this tenant surfaced three important platform constraints:
+
+1. Azure Container Registry with `public_network_access_enabled = false` requires `Premium` SKU
+2. Azure ML registry creation should be attached to a resource group scope in this Terraform implementation
+3. Azure DevOps Key Vault-linked variable groups should not be created during the earliest bootstrap run unless:
+   - the service connection already has Key Vault RBAC
+   - the vault secrets that should be linked actually exist
+
+Because of that, the safer bootstrap pattern is:
+
+- keep private networking enabled
+- let Terraform create `Premium` ACR when private networking is enabled
+- create a shared resource group for the AML registry
+- defer Key Vault-linked variable groups until a later hardening pass
+
+For this reason, set:
+
+```text
+TF_VAR_enable_key_vault_linked_variable_groups=false
+```
+
+during bootstrap.
+
 ## Local Bootstrap Gate
 
 Before any provisioning work, verify the local Terraform runtime:

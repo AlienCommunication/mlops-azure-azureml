@@ -63,6 +63,30 @@ Before the infrastructure pipeline can run successfully, create these Azure DevO
 
 The pipeline will not work end to end until all five exist.
 
+## Tenant-Tested Bootstrap Order
+
+For this tenant, this is the exact order that should be followed:
+
+1. connect the GitHub repository to Azure DevOps
+2. create the infrastructure pipeline from `azure-devops/azure-pipelines-infra.yml`
+3. create Azure DevOps environment `aml-platform-infra`
+4. create Azure DevOps variable group `aml-infra-tfvars`
+5. add all non-secret `TF_VAR_...` values to `aml-infra-tfvars`
+6. try to create Azure service connection `az-mlops-sc` with workload identity federation
+7. if the portal save flow fails, create a bootstrap service principal in Azure and then create `az-mlops-sc` from Azure DevOps CLI
+8. fetch the created service connection ID
+9. add `TF_VAR_existing_service_endpoint_id` to `aml-infra-tfvars`
+10. add secret pipeline variable `AZURE_DEVOPS_PAT` in the infra pipeline
+11. save the variable group and pipeline
+12. rerun the infrastructure pipeline
+
+This order matters because Terraform depends on:
+
+- Azure authentication through `az-mlops-sc`
+- Azure DevOps authentication through `AZURE_DEVOPS_PAT`
+- non-secret inputs through `aml-infra-tfvars`
+- environment approval boundary through `aml-platform-infra`
+
 ## Recommended Execution Order
 
 1. run `azure-pipelines-infra.yml` to provision or update platform resources
@@ -132,6 +156,45 @@ Important:
 - this repo's infrastructure pipeline references it directly in YAML
 - the infrastructure pipeline also requires a bootstrap Azure service connection referenced by `bootstrapAzureServiceConnection`
 - the default placeholder in YAML is `az-mlops-sc`, but you should align it to your real bootstrap service connection name
+
+## Exact Variables Used In This Tenant
+
+The following non-secret variables were added to Azure DevOps variable group `aml-infra-tfvars`:
+
+```text
+TF_VAR_subscription_id=5c6c4978-12d9-43e0-8ba4-9fb538eb1e64
+TF_VAR_subscription_name=DemoPay
+TF_VAR_tenant_id=b6cb2304-83e3-47be-8adb-f6bb37058d52
+TF_VAR_location=eastus
+TF_VAR_prefix=usedcar
+TF_VAR_registry_name=aml-enterprise-registry
+TF_VAR_create_registry=true
+TF_VAR_enable_private_networking=true
+TF_VAR_self_hosted_agents_enabled=true
+TF_VAR_vnet_address_space=["10.20.0.0/16"]
+TF_VAR_private_endpoints_subnet_prefix=10.20.1.0/24
+TF_VAR_agents_subnet_prefix=10.20.2.0/24
+TF_VAR_azure_devops_org_service_url=https://dev.azure.com/genaidevops0
+TF_VAR_azure_devops_project_name=mlops1
+TF_VAR_service_connection_name=az-mlops-sc
+TF_VAR_existing_service_endpoint_id=ac870ddd-2ef3-4522-9ad2-7c937c2390f4
+TF_VAR_azure_auth_mode=workload_identity_federation
+TF_VAR_service_principal_id=
+TF_VAR_enable_key_vault_linked_variable_groups=false
+```
+
+The following secret was added at the pipeline level for the infra pipeline:
+
+```text
+AZURE_DEVOPS_PAT=<secret>
+```
+
+Important:
+
+- `AZURE_DEVOPS_PAT` is not stored in the variable group in this bootstrap path
+- it is added under `Pipeline -> Edit -> Variables`
+- `TF_VAR_existing_service_endpoint_id` must match the real Azure DevOps service connection ID
+- `TF_VAR_enable_key_vault_linked_variable_groups=false` is the safer bootstrap setting until Key Vault secrets and RBAC are fully prepared
 
 ## How To Create `az-mlops-sc`
 
