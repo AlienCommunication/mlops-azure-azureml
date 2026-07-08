@@ -65,6 +65,7 @@ stages:
               inlineScript: |
                 cd "$(terraformRoot)"
                 terraform init \
+                  -reconfigure \
                   -backend-config="resource_group_name=$(terraformBackendResourceGroup)" \
                   -backend-config="storage_account_name=$(terraformBackendStorageAccount)" \
                   -backend-config="container_name=$(terraformBackendContainer)" \
@@ -133,6 +134,7 @@ stages:
                     inlineScript: |
                       cd "$(terraformRoot)"
                       terraform init \
+                        -reconfigure \
                         -backend-config="resource_group_name=$(terraformBackendResourceGroup)" \
                         -backend-config="storage_account_name=$(terraformBackendStorageAccount)" \
                         -backend-config="container_name=$(terraformBackendContainer)" \
