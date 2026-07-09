@@ -27,12 +27,22 @@ def load_evaluation(ml_client, job_name: str) -> dict:
             output_name="evaluation_output",
             download_path=tmp_dir,
         )
-        eval_files = sorted(Path(tmp_dir).rglob("*.json"))
-        if not eval_files:
+        # A uri_file output downloads as a file with no extension, so accept
+        # any file that parses as JSON rather than globbing for *.json.
+        candidates = sorted(p for p in Path(tmp_dir).rglob("*") if p.is_file())
+        if not candidates:
             raise FileNotFoundError(
-                f"No evaluation JSON found in downloaded output for job {job_name}"
+                f"Nothing downloaded for output 'evaluation_output' of job {job_name}"
             )
-        return json.loads(eval_files[0].read_text())
+        for candidate in candidates:
+            try:
+                return json.loads(candidate.read_text())
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                continue
+        raise ValueError(
+            f"No parseable evaluation JSON for job {job_name}; "
+            f"downloaded files: {[str(p) for p in candidates]}"
+        )
 
 
 def register_model_from_job(ml_client, config: dict, job_name: str, evaluation: dict) -> str:
