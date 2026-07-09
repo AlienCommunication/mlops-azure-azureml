@@ -173,6 +173,26 @@ green seconds later, regardless of whether training later failed. Now the
 stage streams the job and fails when training fails — a green run means a
 trained, gated, registered model.
 
+**Lesson 5 — node allocation can stall silently.** One training run sat
+"stuck" for ~50 minutes: the cluster showed `allocationState: Resizing`,
+`target: 1`, `current: 0`, no errors — Azure Batch had allocated a VM (its
+NIC was visible in the subnet) whose bootstrap crawled, then recovered on
+its own. Nothing in the repo was wrong. Diagnosis command (control-plane,
+works from anywhere):
+
+```bash
+az ml compute show -n cpu-cluster-dev -w aml-ws-dev -g rg-aml-dev
+az resource show --ids <cluster-resource-id> \
+  --query "properties.properties.{allocState:allocationState, current:currentNodeCount, target:targetNodeCount, errors:errors}"
+```
+
+Rule of thumb: silent under ~20 minutes — wait; 45+ minutes — investigate;
+`errors` populated or chronic stalls — switch to a newer VM family
+(`TF_VAR_compute_vm_size` in the `aml-infra-tfvars` variable group) or keep
+a warm node (`min_instances = 1`). The submit script now has a watchdog
+(`--timeout-minutes`, default 60) that cancels the job and fails the stage
+loudly instead of hanging the pipeline.
+
 ## Deliberate trade-offs at this stage
 
 - Studio (browser) access to the private workspaces is blocked from

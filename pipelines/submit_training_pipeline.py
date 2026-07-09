@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import tempfile
+import threading
+import time
 from pathlib import Path
 
 from azure.ai.ml import Input, load_environment
@@ -18,6 +20,46 @@ def ensure_environment(ml_client) -> None:
     env_path = Path(__file__).resolve().parent / "environment" / "train-env.yaml"
     environment = load_environment(source=env_path)
     ml_client.environments.create_or_update(environment)
+
+
+def wait_for_job(ml_client, job_name: str, compute_name: str, timeout_minutes: int) -> None:
+    """Stream the job with a watchdog: heartbeat every minute, hard timeout.
+
+    A queued job waits silently while the cluster allocates nodes; node
+    allocation occasionally stalls for a long time. Instead of hanging the
+    pipeline indefinitely, cancel the job and fail with a diagnostic.
+    """
+    stream_done = threading.Event()
+
+    def _stream() -> None:
+        try:
+            ml_client.jobs.stream(job_name)
+        finally:
+            stream_done.set()
+
+    thread = threading.Thread(target=_stream, daemon=True)
+    thread.start()
+
+    started = time.monotonic()
+    deadline = started + timeout_minutes * 60
+    while not stream_done.wait(timeout=60):
+        elapsed_min = (time.monotonic() - started) / 60
+        try:
+            status = ml_client.jobs.get(job_name).status
+        except Exception as exc:  # heartbeat must never kill the wait
+            status = f"unknown ({exc.__class__.__name__})"
+        print(f"[watchdog] job {job_name} status={status} elapsed={elapsed_min:.0f}m", flush=True)
+        if time.monotonic() > deadline:
+            print(f"[watchdog] timeout after {timeout_minutes}m — cancelling job", flush=True)
+            ml_client.jobs.begin_cancel(job_name).result()
+            raise RuntimeError(
+                f"Training job {job_name} exceeded {timeout_minutes} minutes and was canceled. "
+                f"If it never left Queued/Preparing, check cluster node allocation: "
+                f"az ml compute show -n {compute_name} "
+                f"(allocationState=Resizing with currentNodeCount=0 for a long time "
+                f"means Azure is failing to allocate a node — consider a newer VM SKU "
+                f"or min_instances=1)."
+            )
 
 
 def load_evaluation(ml_client, job_name: str) -> dict:
@@ -73,6 +115,7 @@ def submit(
     r2_threshold: float,
     wait: bool,
     register_model: bool,
+    timeout_minutes: int,
 ) -> None:
     config = load_env_config(env_name)
     ml_client = get_ml_client(config)
@@ -97,8 +140,9 @@ def submit(
     if not wait:
         return
 
-    # Stream logs until the job reaches a terminal state; raises on failure.
-    ml_client.jobs.stream(created.name)
+    # Stream logs until the job reaches a terminal state, with a watchdog
+    # timeout so a stalled node allocation fails loudly instead of hanging.
+    wait_for_job(ml_client, created.name, config["compute"]["cpu_cluster"], timeout_minutes)
 
     final_job = ml_client.jobs.get(created.name)
     if final_job.status != "Completed":
@@ -133,6 +177,12 @@ def main() -> None:
         action="store_true",
         help="After a successful, approved run, register the model and emit WORKSPACE_MODEL_VERSION.",
     )
+    parser.add_argument(
+        "--timeout-minutes",
+        type=int,
+        default=60,
+        help="Watchdog: cancel the job and fail if it has not finished within this budget.",
+    )
     args = parser.parse_args()
     submit(
         args.env,
@@ -144,6 +194,7 @@ def main() -> None:
         args.r2_threshold,
         wait=args.wait,
         register_model=args.register_model,
+        timeout_minutes=args.timeout_minutes,
     )
 
 

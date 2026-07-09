@@ -4,7 +4,7 @@ display_name: Train Used Car Price Model
 version: 1
 type: command
 code: ../../
-environment: azureml:used-car-training-env@latest
+environment: azureml:used-car-training-env:1
 command: >-
   python -m src.train
   --train_data ${{inputs.train_data}}

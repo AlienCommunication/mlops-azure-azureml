@@ -14,7 +14,7 @@ storage:
 deployment:
   endpoint_name: used-car-price-dev
   deployment_name: blue
-  instance_type: Standard_DS3_v2
+  instance_type: Standard_F2s_v2
   instance_count: 1
 monitoring:
   application_insights_enabled: true

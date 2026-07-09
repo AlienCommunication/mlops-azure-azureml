@@ -4,7 +4,7 @@ display_name: Evaluate Used Car Price Model
 version: 1
 type: command
 code: ../../
-environment: azureml:used-car-training-env@latest
+environment: azureml:used-car-training-env:1
 command: >-
   python -m src.evaluate
   --metrics_input ${{inputs.metrics_input}}
