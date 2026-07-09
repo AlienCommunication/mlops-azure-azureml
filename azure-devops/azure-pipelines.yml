@@ -9,11 +9,17 @@ pr:
       - main
 
 variables:
-  pythonVersion: '3.10'
-  projectRoot: '.'
-  serviceConnection: 'az-mlops-sc'
-  location: 'eastus'
-  modelName: 'used-car-price-model'
+  - group: aml-dev-shared
+  - name: pythonVersion
+    value: '3.10'
+  - name: projectRoot
+    value: '.'
+  - name: serviceConnection
+    value: 'az-mlops-sc'
+  - name: location
+    value: 'eastus'
+  - name: modelName
+    value: 'used-car-price-model'
 
 stages:
   - stage: Validate

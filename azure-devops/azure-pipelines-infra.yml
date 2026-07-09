@@ -57,6 +57,22 @@ stages:
             displayName: Terraform fmt check
 
           - task: AzureCLI@2
+            displayName: Ensure Terraform state backend exists
+            inputs:
+              azureSubscription: '$(bootstrapAzureServiceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                cd "$(terraformRoot)"
+                export TF_BACKEND_RESOURCE_GROUP="$(terraformBackendResourceGroup)"
+                export TF_BACKEND_STORAGE_ACCOUNT="$(terraformBackendStorageAccount)"
+                export TF_BACKEND_CONTAINER="$(terraformBackendContainer)"
+                export TF_BACKEND_LOCATION="$(TF_VAR_location)"
+                bash bootstrap_backend.sh
+            env:
+              TF_VAR_location: $(TF_VAR_location)
+
+          - task: AzureCLI@2
             displayName: Terraform init, validate, and plan
             inputs:
               azureSubscription: '$(bootstrapAzureServiceConnection)'
@@ -66,9 +82,15 @@ stages:
               inlineScript: |
                 cd "$(terraformRoot)"
                 export ARM_CLIENT_ID="$servicePrincipalId"
-                export ARM_CLIENT_SECRET="$servicePrincipalKey"
                 export ARM_TENANT_ID="$tenantId"
                 export ARM_SUBSCRIPTION_ID="$(TF_VAR_subscription_id)"
+                # Workload identity federation connections expose idToken instead of a secret.
+                if [ -n "${idToken:-}" ]; then
+                  export ARM_USE_OIDC=true
+                  export ARM_OIDC_TOKEN="$idToken"
+                else
+                  export ARM_CLIENT_SECRET="$servicePrincipalKey"
+                fi
                 terraform init \
                   -reconfigure \
                   -backend-config="resource_group_name=$(terraformBackendResourceGroup)" \
@@ -140,9 +162,15 @@ stages:
                     inlineScript: |
                       cd "$(terraformRoot)"
                       export ARM_CLIENT_ID="$servicePrincipalId"
-                      export ARM_CLIENT_SECRET="$servicePrincipalKey"
                       export ARM_TENANT_ID="$tenantId"
                       export ARM_SUBSCRIPTION_ID="$(TF_VAR_subscription_id)"
+                      # Workload identity federation connections expose idToken instead of a secret.
+                      if [ -n "${idToken:-}" ]; then
+                        export ARM_USE_OIDC=true
+                        export ARM_OIDC_TOKEN="$idToken"
+                      else
+                        export ARM_CLIENT_SECRET="$servicePrincipalKey"
+                      fi
                       terraform init \
                         -reconfigure \
                         -backend-config="resource_group_name=$(terraformBackendResourceGroup)" \

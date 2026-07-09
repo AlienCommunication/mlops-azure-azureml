@@ -104,7 +104,7 @@ Before infrastructure provisioning, verify the local Terraform version:
 terraform version
 ```
 
-This repo requires Terraform `>= 1.6.0`.
+This repo requires Terraform `>= 1.7.0`.
 
 If Homebrew still shows `Terraform v1.5.7`, use this fix:
 
@@ -117,7 +117,7 @@ tfenv use 1.9.8
 terraform version
 ```
 
-Only continue after `terraform version` shows `>= 1.6.0`.
+Only continue after `terraform version` shows `>= 1.7.0`.
 
 ## Directory Layout
 

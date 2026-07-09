@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import tempfile
+from pathlib import Path
 
 from src.azure_auth import get_ml_client
 from src.config import load_env_config
@@ -29,12 +31,14 @@ def smoke_test(env_name: str, endpoint_name: str | None = None, deployment_name:
     endpoint = endpoint_name or config["deployment"]["endpoint_name"]
     deployment = deployment_name or config["deployment"]["deployment_name"]
 
-    response = ml_client.online_endpoints.invoke(
-        endpoint_name=endpoint,
-        deployment_name=deployment,
-        request_file=None,
-        input_data=json.dumps(SAMPLE_PAYLOAD),
-    )
+    with tempfile.TemporaryDirectory() as tmp_dir:
+        request_file = Path(tmp_dir) / "smoke-request.json"
+        request_file.write_text(json.dumps(SAMPLE_PAYLOAD))
+        response = ml_client.online_endpoints.invoke(
+            endpoint_name=endpoint,
+            deployment_name=deployment,
+            request_file=str(request_file),
+        )
     print(response)
 
 

@@ -287,6 +287,38 @@ If resources were partially created before the backend was added, you have two c
 
 For production hygiene, backend-first plus import is usually the better route if you want to preserve the created assets.
 
+### Current Recovery Pattern In This Tenant
+
+Because multiple bootstrap runs partially created resources before state was fully stabilized, the current production-correct recovery pattern is:
+
+1. initialize remote backend
+2. import already-created Azure resources into state
+3. import already-created Azure DevOps resources into state
+4. rerun `terraform plan`
+5. rerun pipeline apply
+
+This is why errors like:
+
+- resource group already exists
+- VNet already exists
+- Azure DevOps environment already exists
+- Azure DevOps variable group already exists
+
+should not be solved by adding "skip if exists" logic.
+
+Instead, they should be solved by importing the objects into Terraform state if Terraform is supposed to own them going forward.
+
+In this tenant, that exact rule applied to:
+
+- `rg-aml-network`
+- `usedcar-vnet`
+- `rg-aml-dev`
+- `rg-aml-test`
+- `rg-aml-prod`
+- `rg-aml-shared`
+- Azure DevOps environments like `aml-test` and `aml-prod`
+- Azure DevOps variable groups like `aml-dev-shared`
+
 ### Backend Values Recommended For This Tenant
 
 Use backend configuration like:
@@ -322,6 +354,52 @@ In this repo, the infrastructure pipeline was updated to use:
 
 This is the production-correct pattern for Terraform remote backend auth in Azure DevOps when using a service connection backed by a service principal.
 
+### Recovery Lesson From Existing Resources
+
+After backend and auth were corrected, `terraform apply` still failed on objects that already existed in Azure or Azure DevOps.
+
+That was not a Terraform defect.
+
+That was expected behavior because:
+
+1. the objects existed
+2. Terraform code declared them as managed resources
+3. the remote state did not yet contain them
+
+The production-grade answer is:
+
+1. import those objects into remote state
+2. rerun `terraform plan`
+3. confirm plan no longer tries to recreate them
+4. rerun pipeline apply
+
+The repo implements this declaratively via gated `import` blocks in
+`infra/bicep/terraform/imports.tf`, controlled by the `bootstrap_adopt`
+variable, plus `import_azdo_bootstrap.sh` for Azure DevOps objects whose
+numeric import IDs require a REST lookup.
+
+Recommended recovery sequence:
+
+```bash
+cd /Users/amit/Desktop/Code\ 1_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/azure-mlops-repo/mlops-azure-azureml/infra/bicep/terraform
+
+terraform init \
+  -backend-config="resource_group_name=rg-usedcar-tfstate" \
+  -backend-config="storage_account_name=stusedcartfstate01" \
+  -backend-config="container_name=tfstate" \
+  -backend-config="key=azureml-enterprise.tfstate"
+
+terraform plan  -var 'bootstrap_adopt=["all"]'
+terraform apply -var 'bootstrap_adopt=["all"]'
+
+# Azure DevOps environments and variable groups, if they pre-exist:
+export AZURE_DEVOPS_EXT_PAT=<pat>
+bash import_azdo_bootstrap.sh
+terraform plan
+```
+
+Only when that local plan is clean enough should Azure DevOps `terraform apply` be rerun.
+
 ## Local Bootstrap Gate
 
 Before any provisioning work, verify the local Terraform runtime:
@@ -330,7 +408,7 @@ Before any provisioning work, verify the local Terraform runtime:
 terraform version
 ```
 
-This repo requires Terraform `>= 1.6.0`.
+This repo requires Terraform `>= 1.7.0`.
 
 If your Mac still shows `Terraform v1.5.7`, fix the local toolchain first:
 

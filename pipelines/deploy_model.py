@@ -42,12 +42,9 @@ def deploy(env_name: str, model_name: str, model_version: str, source: str) -> N
     )
 
     ml_client.online_deployments.begin_create_or_update(deployment).result()
-    ml_client.online_endpoints.begin_update(
-        ManagedOnlineEndpoint(
-            name=endpoint_name,
-            traffic={deployment_name: 100},
-        )
-    ).result()
+    live_endpoint = ml_client.online_endpoints.get(endpoint_name)
+    live_endpoint.traffic = {deployment_name: 100}
+    ml_client.online_endpoints.begin_create_or_update(live_endpoint).result()
     print(f"Deployed {model_name}:{model_version} to {endpoint_name}/{deployment_name}")
 
 

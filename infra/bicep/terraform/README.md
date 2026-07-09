@@ -2,6 +2,63 @@
 
 This folder is the preferred production-grade provisioning path for this repo.
 
+## Fresh Setup Or Existing Resources? Read This First
+
+Terraform behaves differently depending on where your Azure resources came from:
+
+| Situation | Covered? | What to do |
+|-----------|----------|------------|
+| Nothing exists yet (fresh tenant/subscription) | Yes | Run `bootstrap_backend.sh` once, set variables, then `terraform init/plan/apply`. Everything is created from zero. |
+| Resources exist and are already in Terraform state | Yes | Normal operation. Re-runs are idempotent; plan shows no changes unless config changed. |
+| Resources exist in Azure (or Azure DevOps) but are NOT in Terraform state | No — apply fails with `already exists` | Adopt them declaratively: `terraform apply -var 'bootstrap_adopt=["all"]'` (see `imports.tf`), or reference them with `data` sources, or disable creation with a feature flag. This is intentional Terraform behavior, not a bug. |
+
+### Fresh setup quickstart
+
+The operating principle: the pipeline provisions everything it possibly can.
+The only manual work is "day 0" — the trust and identity objects that must
+exist before any pipeline can run at all:
+
+1. Create the Azure DevOps day-0 objects (Terraform cannot create the things
+   it needs to authenticate with): project, PAT, service connection
+   `az-mlops-sc` (whose identity needs subscription Contributor), variable
+   group `aml-infra-tfvars` with the `TF_VAR_*` and `TF_BACKEND_*` values,
+   and the secret pipeline variable `AZURE_DEVOPS_PAT`.
+2. Create the pipeline from `azure-devops/azure-pipelines-infra.yml` and run it.
+
+That is the whole fresh setup. The pipeline itself ensures the Terraform
+state backend exists (it runs `bootstrap_backend.sh` idempotently before
+`terraform init`), then plans and applies everything else. No laptop
+execution is required.
+
+Running locally (`az login`, `bash bootstrap_backend.sh`, `terraform plan`)
+remains possible for development and debugging, but it is not the operating
+path.
+
+On a truly fresh subscription there is nothing to import and no
+`already exists` error is possible.
+
+### Existing-resource (brownfield) recovery
+
+If a previous partial apply, a manual portal action, or another tool already
+created some of the resources this config declares, Terraform must be told it
+owns them before the next apply. Adoption is declarative and gated by the
+`bootstrap_adopt` variable (see [imports.tf](imports.tf)):
+
+```bash
+terraform plan  -var 'bootstrap_adopt=["all"]'   # adoptions are shown in the plan
+terraform apply -var 'bootstrap_adopt=["all"]'
+```
+
+Entries can also target a specific kind or environment, for example
+`["storage", "app_insights:dev"]`. An entry whose resource does not actually
+exist in Azure fails the plan with `Cannot import non-existent remote object` —
+remove that entry and Terraform will create the resource normally. After the
+adoption apply succeeds, drop the variable; subsequent runs need nothing.
+
+Azure DevOps objects (environments, variable groups) have numeric import IDs
+that require a REST lookup, so they are adopted with a helper script instead:
+export `AZURE_DEVOPS_EXT_PAT` and run `bash import_azdo_bootstrap.sh`.
+
 It is designed to manage both:
 
 - Azure resources
@@ -131,7 +188,7 @@ Examples of secret Azure-hosted inputs:
 
 This project requires:
 
-- Terraform `>= 1.6.0`
+- Terraform `>= 1.7.0`
 
 If `terraform init` fails with an error like:
 
@@ -164,7 +221,7 @@ terraform version
 
 Expected result:
 
-- `terraform version` shows a version `>= 1.6.0`
+- `terraform version` shows a version `>= 1.7.0`
 
 If `tfenv` is still not found, start a new shell and re-run:
 
@@ -186,7 +243,7 @@ Only continue to `terraform init` after the version check passes.
 
 ## Suggested Execution Order
 
-1. create Terraform backend and state location
+1. create Terraform backend and state location (`bash bootstrap_backend.sh`)
 2. define Azure-hosted Terraform inputs in Azure DevOps variables, variable groups, and Key Vault
 3. run `terraform init`
 4. run `terraform plan`
@@ -249,12 +306,82 @@ If resources were created before remote backend was enabled:
 4. rerun `terraform plan`
 5. rerun `terraform apply`
 
-Example imports for this tenant’s current partial state:
+The production mechanism for step 3 is the declarative, gated import blocks in
+[imports.tf](imports.tf):
 
 ```bash
-terraform import 'azurerm_resource_group.network[0]' '/subscriptions/5c6c4978-12d9-43e0-8ba4-9fb538eb1e64/resourceGroups/rg-aml-network'
-terraform import 'azurerm_resource_group.env["test"]' '/subscriptions/5c6c4978-12d9-43e0-8ba4-9fb538eb1e64/resourceGroups/rg-aml-test'
+terraform plan  -var 'bootstrap_adopt=["all"]'   # review adoptions in the plan
+terraform apply -var 'bootstrap_adopt=["all"]'
 ```
+
+If only some resources exist (a genuinely partial apply), list exactly what
+exists, at kind or kind:env granularity:
+
+```bash
+terraform apply -var 'bootstrap_adopt=["network_rg", "vnet", "storage", "app_insights:dev"]'
+```
+
+Behavior of the import blocks:
+
+- default empty list: inert; fresh setups are completely unaffected
+- target already in Terraform state: no-op, safe to leave enabled for one run
+- target missing in Azure: plan fails with `Cannot import non-existent remote
+  object` — remove that entry and Terraform will create the resource instead
+
+This runs through the normal plan/apply path, so adoptions are visible in the
+plan output, reviewable in a PR, and executable from the CI pipeline — no
+laptop-only imperative steps.
+
+Azure DevOps environments and variable groups are the one exception: their
+Terraform import IDs are numeric and require a REST lookup, which import
+blocks cannot express. For those, a small helper remains:
+
+```bash
+export AZURE_DEVOPS_EXT_PAT=<pat-with-env-and-vargroup-read>
+bash import_azdo_bootstrap.sh
+terraform plan
+```
+
+Why this is production-correct:
+
+- we keep Terraform as the long-term owner
+- we recover state instead of deleting partially created enterprise resources
+- we avoid adding brittle "skip if exists" logic that would hide ownership drift
+
+## Why Terraform Does Not "Skip If Exists"
+
+Terraform is state-driven, not existence-driven.
+
+That means:
+
+- if a resource block exists in code and the object is already in Terraform state, Terraform manages it
+- if a resource block exists in code and the object exists only in Azure but not in Terraform state, Terraform tries to create it
+- Azure then returns `already exists`
+- the production-grade recovery action is to import it
+
+If a resource should exist but must not be managed by Terraform, the production approach is:
+
+- do not declare it as a `resource`
+- use a `data` source instead
+- or gate creation with explicit feature flags
+
+Do not rely on Terraform to dynamically "notice" an existing resource and silently skip ownership.
+
+## Managing Multiple Resources Of The Same Type In Production
+
+For production Terraform, multiple similar resources are normally handled with:
+
+- `for_each` for stable keyed resources
+- `count` for simple indexed repetition
+- modules for repeated architecture patterns
+
+This repo already uses `for_each` for environment-scoped resources, for example:
+
+- `dev`
+- `test`
+- `prod`
+
+This is the preferred production pattern because each instance has a stable address in Terraform state.
 
 ## Private Networking Notes
 
@@ -276,8 +403,8 @@ You will likely still want to extend this for a real enterprise landing zone wit
 
 ## Files
 
-- [versions.tf](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/terraform/versions.tf)
-- [providers.tf](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/terraform/providers.tf)
-- [variables.tf](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/terraform/variables.tf)
-- [main.tf](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/terraform/main.tf)
-- [terraform.tfvars.example](/Users/amit/Desktop/Code%201_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/infra/terraform/terraform.tfvars.example)
+- [versions.tf](/Users/amit/Desktop/Code 1_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/azure-mlops-repo/mlops-azure-azureml/infra/bicep/terraform/versions.tf)
+- [providers.tf](/Users/amit/Desktop/Code 1_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/azure-mlops-repo/mlops-azure-azureml/infra/bicep/terraform/providers.tf)
+- [variables.tf](/Users/amit/Desktop/Code 1_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/azure-mlops-repo/mlops-azure-azureml/infra/bicep/terraform/variables.tf)
+- [main.tf](/Users/amit/Desktop/Code 1_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/azure-mlops-repo/mlops-azure-azureml/infra/bicep/terraform/main.tf)
+- [terraform.tfvars.example](/Users/amit/Desktop/Code 1_pers/PersonalProjects/AgenticAI/Azure-agentic-setup/official-repo/azure-mlops/azure-mlops-repo/mlops-azure-azureml/infra/bicep/terraform/terraform.tfvars.example)

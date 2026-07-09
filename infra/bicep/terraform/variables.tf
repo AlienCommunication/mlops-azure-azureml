@@ -122,14 +122,22 @@ variable "enable_key_vault_linked_variable_groups" {
 }
 
 variable "service_principal_id" {
-  description = "Service principal client ID used by the ARM service connection."
+  description = "Service principal client ID used by the ARM service connection. Only required when azure_auth_mode is service_principal_secret."
   type        = string
+  default     = null
 }
 
 variable "service_principal_key" {
-  description = "Service principal secret used by the ARM service connection."
+  description = "Service principal secret used by the ARM service connection. Only required when azure_auth_mode is service_principal_secret."
   type        = string
   sensitive   = true
+  default     = null
+}
+
+variable "bootstrap_adopt" {
+  description = "One-time adoption list for resources that already exist in Azure but are not yet in Terraform state. Empty (default) on fresh setups. Use [\"all\"], kind names (e.g. \"storage\"), or kind:env entries (e.g. \"storage:dev\"). See imports.tf."
+  type        = set(string)
+  default     = []
 }
 
 variable "devops_environments" {

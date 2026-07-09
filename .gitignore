@@ -9,9 +9,10 @@ data/used_cars.csv
 .terraform/
 *.tfstate
 *.tfstate.backup
-.terraform.lock.hcl
 
 # Terraform local files
+# NOTE: .terraform.lock.hcl is intentionally NOT ignored; commit it so CI and
+# local runs resolve identical provider versions.
 **/.terraform/
 *.tfstate
 *.tfstate.*
@@ -21,3 +22,5 @@ override.tf.json
 *_override.tf
 *_override.tf.json
 terraform.tfvars
+tfplan
+terraform-plan*.txt
