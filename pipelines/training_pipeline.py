@@ -1,5 +1,6 @@
-from __future__ import annotations
-
+# NOTE: no `from __future__ import annotations` here. The @dsl.pipeline
+# decorator reads this function's annotations at runtime; PEP 563 string
+# annotations break it ("Unsupported annotation type 'str'").
 from pathlib import Path
 
 from azure.ai.ml import Input, dsl, load_component
@@ -15,7 +16,7 @@ evaluate_component = load_component(source=ROOT / "components" / "evaluate_compo
     description="Train and evaluate used car price model",
 )
 def used_car_training_pipeline(
-    train_data: str,
+    train_data: Input,
     n_estimators: int = 250,
     max_depth: int = 16,
     min_samples_split: int = 2,
@@ -23,7 +24,7 @@ def used_car_training_pipeline(
     r2_threshold: float = 0.8,
 ):
     train_step = train_component(
-        train_data=Input(type="uri_file", path=train_data),
+        train_data=train_data,
         n_estimators=n_estimators,
         max_depth=max_depth,
         min_samples_split=min_samples_split,

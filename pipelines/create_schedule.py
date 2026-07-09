@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 from datetime import datetime, timezone
 
+from azure.ai.ml import Input
 from azure.ai.ml.entities import CronTrigger, JobSchedule
 
 from pipelines.training_pipeline import used_car_training_pipeline
@@ -24,7 +25,7 @@ def create_schedule(
     ml_client = get_ml_client(config)
 
     pipeline_job = used_car_training_pipeline(
-        train_data=data_path,
+        train_data=Input(type="uri_file", path=data_path),
         n_estimators=n_estimators,
         max_depth=max_depth,
         min_samples_split=min_samples_split,

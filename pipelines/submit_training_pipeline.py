@@ -5,7 +5,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from azure.ai.ml import load_environment
+from azure.ai.ml import Input, load_environment
 from azure.ai.ml.constants import AssetTypes
 from azure.ai.ml.entities import Model
 
@@ -69,7 +69,7 @@ def submit(
     ensure_environment(ml_client)
 
     pipeline_job = used_car_training_pipeline(
-        train_data=data_path,
+        train_data=Input(type="uri_file", path=data_path),
         n_estimators=n_estimators,
         max_depth=max_depth,
         min_samples_split=min_samples_split,
