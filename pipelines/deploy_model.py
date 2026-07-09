@@ -10,18 +10,22 @@ from src.azure_auth import get_ml_client, get_registry_client
 from src.config import load_env_config
 
 
-def ensure_environment(ml_client) -> None:
+def ensure_environment(ml_client):
     # The serving environment must exist in the *target* workspace; it is not
-    # inherited from dev, so create/update it here before deploying.
+    # inherited from dev, so create/update it here before deploying. Return
+    # the created asset so the deployment can pin its exact version —
+    # "@latest" label resolution 404s on freshly created environments.
     env_path = Path(__file__).resolve().parent / "environment" / "train-env.yaml"
-    ml_client.environments.create_or_update(load_environment(source=env_path))
+    created = ml_client.environments.create_or_update(load_environment(source=env_path))
+    print(f"Serving environment ready: {created.name}:{created.version}")
+    return created
 
 
 def deploy(env_name: str, model_name: str, model_version: str, source: str) -> None:
     config = load_env_config(env_name)
     ml_client = get_ml_client(config)
     registry_client = get_registry_client(config) if source == "registry" else None
-    ensure_environment(ml_client)
+    serving_env = ensure_environment(ml_client)
 
     endpoint_name = config["deployment"]["endpoint_name"]
     deployment_name = config["deployment"]["deployment_name"]
@@ -46,7 +50,7 @@ def deploy(env_name: str, model_name: str, model_version: str, source: str) -> N
         endpoint_name=endpoint_name,
         model=model_ref,
         code_configuration=CodeConfiguration(code=".", scoring_script="src/score.py"),
-        environment="azureml:used-car-training-env@latest",
+        environment=f"azureml:{serving_env.name}:{serving_env.version}",
         instance_type=config["deployment"]["instance_type"],
         instance_count=config["deployment"]["instance_count"],
     )
