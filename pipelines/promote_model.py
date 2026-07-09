@@ -2,8 +2,7 @@ from __future__ import annotations
 
 import argparse
 
-from azure.ai.ml.constants import AssetTypes
-from azure.ai.ml.entities import Model
+from azure.core.exceptions import ResourceNotFoundError
 
 from src.azure_auth import get_ml_client, get_registry_client
 from src.config import load_env_config
@@ -19,30 +18,26 @@ def promote_model(
     ml_client = get_ml_client(config)
     registry_client = get_registry_client(config)
 
-    source_model = ml_client.models.get(name=model_name, version=workspace_model_version)
-    registry_path = f"azureml:{model_name}:{workspace_model_version}"
+    target_version = str(registry_model_version or workspace_model_version)
 
-    promoted = registry_client.models.create_or_update(
-        Model(
+    try:
+        existing = registry_client.models.get(name=model_name, version=target_version)
+        print(f"Model already in registry: {model_name}:{existing.version}; skipping promotion.")
+    except ResourceNotFoundError:
+        ml_client.models.share(
             name=model_name,
-            version=registry_model_version or str(workspace_model_version),
-            path=registry_path,
-            type=AssetTypes.CUSTOM_MODEL,
-            description=source_model.description,
-            tags={
-                **(source_model.tags or {}),
-                "workspace_model_version": str(workspace_model_version),
-                "source_workspace": config["workspace_name"],
-                "promoted_from_env": env_name,
-            },
+            version=str(workspace_model_version),
+            share_with_name=model_name,
+            share_with_version=target_version,
+            registry_name=config["registry_name"],
         )
-    )
-    print(
-        f"Promoted workspace model {model_name}:{workspace_model_version} "
-        f"to registry version {promoted.version}"
-    )
+        print(
+            f"Promoted workspace model {model_name}:{workspace_model_version} "
+            f"to registry {config['registry_name']} as version {target_version}"
+        )
+
     # Azure DevOps output variable for downstream deploy stages.
-    print(f"##vso[task.setvariable variable=REGISTRY_MODEL_VERSION;isOutput=true]{promoted.version}")
+    print(f"##vso[task.setvariable variable=REGISTRY_MODEL_VERSION;isOutput=true]{target_version}")
 
 
 def main() -> None:

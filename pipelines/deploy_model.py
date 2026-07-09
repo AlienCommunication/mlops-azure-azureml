@@ -1,17 +1,27 @@
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 
+from azure.ai.ml import load_environment
 from azure.ai.ml.entities import CodeConfiguration, ManagedOnlineDeployment, ManagedOnlineEndpoint
 
 from src.azure_auth import get_ml_client, get_registry_client
 from src.config import load_env_config
 
 
+def ensure_environment(ml_client) -> None:
+    # The serving environment must exist in the *target* workspace; it is not
+    # inherited from dev, so create/update it here before deploying.
+    env_path = Path(__file__).resolve().parent / "environment" / "train-env.yaml"
+    ml_client.environments.create_or_update(load_environment(source=env_path))
+
+
 def deploy(env_name: str, model_name: str, model_version: str, source: str) -> None:
     config = load_env_config(env_name)
     ml_client = get_ml_client(config)
     registry_client = get_registry_client(config) if source == "registry" else None
+    ensure_environment(ml_client)
 
     endpoint_name = config["deployment"]["endpoint_name"]
     deployment_name = config["deployment"]["deployment_name"]
