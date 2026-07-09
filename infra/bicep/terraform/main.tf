@@ -390,3 +390,198 @@ resource "azurerm_private_endpoint" "acr" {
     private_dns_zone_ids = [azurerm_private_dns_zone.acr[0].id]
   }
 }
+
+# ---------------------------------------------------------------------------
+# Azure ML workspace private endpoints
+# Workspaces are created with publicNetworkAccess=Disabled, so pipeline agents
+# and any in-VNet client need a workspace private endpoint plus the AML
+# private DNS zones to reach the workspace API and data plane.
+# ---------------------------------------------------------------------------
+
+resource "azurerm_private_dns_zone" "aml_api" {
+  count = var.enable_private_networking ? 1 : 0
+
+  name                = "privatelink.api.azureml.ms"
+  resource_group_name = azurerm_resource_group.network[0].name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone" "aml_notebooks" {
+  count = var.enable_private_networking ? 1 : 0
+
+  name                = "privatelink.notebooks.azure.net"
+  resource_group_name = azurerm_resource_group.network[0].name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "aml_api" {
+  count = var.enable_private_networking ? 1 : 0
+
+  name                  = "${var.prefix}-aml-api-link"
+  resource_group_name   = azurerm_resource_group.network[0].name
+  private_dns_zone_name = azurerm_private_dns_zone.aml_api[0].name
+  virtual_network_id    = azurerm_virtual_network.shared[0].id
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "aml_notebooks" {
+  count = var.enable_private_networking ? 1 : 0
+
+  name                  = "${var.prefix}-aml-notebooks-link"
+  resource_group_name   = azurerm_resource_group.network[0].name
+  private_dns_zone_name = azurerm_private_dns_zone.aml_notebooks[0].name
+  virtual_network_id    = azurerm_virtual_network.shared[0].id
+}
+
+resource "azurerm_private_endpoint" "workspace" {
+  for_each = var.enable_private_networking ? local.env_map : {}
+
+  name                = "${var.prefix}-${each.key}-ws-pe"
+  location            = azurerm_resource_group.env[each.key].location
+  resource_group_name = azurerm_resource_group.env[each.key].name
+  subnet_id           = azurerm_subnet.private_endpoints[0].id
+
+  private_service_connection {
+    name                           = "${var.prefix}-${each.key}-ws-psc"
+    private_connection_resource_id = azapi_resource.workspace[each.key].id
+    is_manual_connection           = false
+    subresource_names              = ["amlworkspace"]
+  }
+
+  private_dns_zone_group {
+    name = "aml-dns"
+    private_dns_zone_ids = [
+      azurerm_private_dns_zone.aml_api[0].id,
+      azurerm_private_dns_zone.aml_notebooks[0].id,
+    ]
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Self-hosted Azure DevOps agents
+# VMSS in the agents subnet, managed by an Azure DevOps elastic pool (Azure
+# DevOps installs the agent and scales instances). Subnets created after
+# Sep 2025 have no default outbound internet, so a NAT gateway provides the
+# egress the agent needs to reach Azure DevOps.
+# ---------------------------------------------------------------------------
+
+resource "azurerm_public_ip" "agents_nat" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled ? 1 : 0
+
+  name                = "${var.prefix}-agents-nat-pip"
+  location            = azurerm_resource_group.network[0].location
+  resource_group_name = azurerm_resource_group.network[0].name
+  allocation_method   = "Static"
+  sku                 = "Standard"
+  tags                = var.tags
+}
+
+resource "azurerm_nat_gateway" "agents" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled ? 1 : 0
+
+  name                = "${var.prefix}-agents-nat"
+  location            = azurerm_resource_group.network[0].location
+  resource_group_name = azurerm_resource_group.network[0].name
+  sku_name            = "Standard"
+  tags                = var.tags
+}
+
+resource "azurerm_nat_gateway_public_ip_association" "agents" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled ? 1 : 0
+
+  nat_gateway_id       = azurerm_nat_gateway.agents[0].id
+  public_ip_address_id = azurerm_public_ip.agents_nat[0].id
+}
+
+resource "azurerm_subnet_nat_gateway_association" "agents" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled ? 1 : 0
+
+  subnet_id      = azurerm_subnet.agents[0].id
+  nat_gateway_id = azurerm_nat_gateway.agents[0].id
+}
+
+resource "random_password" "agent_admin" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled ? 1 : 0
+
+  length  = 24
+  special = true
+}
+
+resource "azurerm_linux_virtual_machine_scale_set" "agents" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled ? 1 : 0
+
+  name                = "${var.prefix}-agents-vmss"
+  location            = azurerm_resource_group.network[0].location
+  resource_group_name = azurerm_resource_group.network[0].name
+  sku                 = var.agent_vm_size
+  instances           = 0
+
+  admin_username                  = "azdoagent"
+  admin_password                  = random_password.agent_admin[0].result
+  disable_password_authentication = false
+
+  # Required shape for Azure DevOps elastic pools.
+  overprovision          = false
+  upgrade_mode           = "Manual"
+  single_placement_group = false
+
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "0001-com-ubuntu-server-jammy"
+    sku       = "22_04-lts-gen2"
+    version   = "latest"
+  }
+
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+  }
+
+  network_interface {
+    name    = "agents-nic"
+    primary = true
+
+    ip_configuration {
+      name      = "internal"
+      primary   = true
+      subnet_id = azurerm_subnet.agents[0].id
+    }
+  }
+
+  # Ubuntu 22.04 ships Python 3.10; install the Azure CLI and pip for
+  # AzureCLI@2 tasks and the AML SDK.
+  custom_data = base64encode(<<-CLOUDINIT
+    #cloud-config
+    package_update: true
+    packages:
+      - python3-pip
+      - python3-venv
+      - jq
+    runcmd:
+      - curl -sL https://aka.ms/InstallAzureCLIDeb | bash
+    CLOUDINIT
+  )
+
+  tags = merge(var.tags, { role = "azdo-agent" })
+
+  lifecycle {
+    # The elastic pool controls instance count after creation.
+    ignore_changes = [instances, tags]
+  }
+}
+
+resource "azuredevops_elastic_pool" "agents" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled && var.existing_service_endpoint_id != null ? 1 : 0
+
+  name                   = var.agent_pool_name
+  service_endpoint_id    = var.existing_service_endpoint_id
+  service_endpoint_scope = data.azuredevops_project.project.id
+  azure_resource_id      = azurerm_linux_virtual_machine_scale_set.agents[0].id
+  project_id             = data.azuredevops_project.project.id
+
+  desired_idle           = var.agent_pool_desired_idle
+  max_capacity           = var.agent_pool_max_capacity
+  recycle_after_each_use = false
+  time_to_live_minutes   = 15
+  auto_provision         = false
+  auto_update            = true
+}

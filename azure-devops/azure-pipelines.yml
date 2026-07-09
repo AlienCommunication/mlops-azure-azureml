@@ -20,6 +20,10 @@ variables:
     value: 'eastus'
   - name: modelName
     value: 'used-car-price-model'
+  # Self-hosted VMSS pool inside the VNet; required for any stage that talks
+  # to the private AML workspaces (train, promote, deploy, smoke test).
+  - name: selfHostedPool
+    value: 'aml-selfhosted-agents'
 
 stages:
   - stage: Validate
@@ -50,13 +54,12 @@ stages:
     jobs:
       - job: train_dev
         pool:
-          vmImage: 'ubuntu-latest'
+          name: $(selfHostedPool)
         steps:
           - checkout: self
-          - task: UsePythonVersion@0
-            inputs:
-              versionSpec: '$(pythonVersion)'
           - script: |
+              python3 -m venv $(Pipeline.Workspace)/mlops-venv
+              . $(Pipeline.Workspace)/mlops-venv/bin/activate
               python -m pip install --upgrade pip
               pip install -r $(projectRoot)/requirements.txt
             displayName: Install dependencies
@@ -70,6 +73,7 @@ stages:
               scriptType: bash
               scriptLocation: inlineScript
               inlineScript: |
+                . $(Pipeline.Workspace)/mlops-venv/bin/activate
                 cd $(projectRoot)
                 PYTHONPATH=. python pipelines/submit_training_pipeline.py --env dev --data azureml:used-car-training-reference:1
 
@@ -80,15 +84,16 @@ stages:
     jobs:
       - deployment: promote_model
         environment: aml-test-approval
+        pool:
+          name: $(selfHostedPool)
         strategy:
           runOnce:
             deploy:
               steps:
                 - checkout: self
-                - task: UsePythonVersion@0
-                  inputs:
-                    versionSpec: '$(pythonVersion)'
                 - script: |
+                    python3 -m venv $(Pipeline.Workspace)/mlops-venv
+                    . $(Pipeline.Workspace)/mlops-venv/bin/activate
                     python -m pip install --upgrade pip
                     pip install -r $(projectRoot)/requirements.txt
                   displayName: Install dependencies
@@ -99,6 +104,7 @@ stages:
                     scriptType: bash
                     scriptLocation: inlineScript
                     inlineScript: |
+                      . $(Pipeline.Workspace)/mlops-venv/bin/activate
                       cd $(projectRoot)
                       PYTHONPATH=. python pipelines/promote_model.py \
                         --env dev \
@@ -112,15 +118,16 @@ stages:
     jobs:
       - deployment: deploy_test
         environment: aml-test
+        pool:
+          name: $(selfHostedPool)
         strategy:
           runOnce:
             deploy:
               steps:
                 - checkout: self
-                - task: UsePythonVersion@0
-                  inputs:
-                    versionSpec: '$(pythonVersion)'
                 - script: |
+                    python3 -m venv $(Pipeline.Workspace)/mlops-venv
+                    . $(Pipeline.Workspace)/mlops-venv/bin/activate
                     python -m pip install --upgrade pip
                     pip install -r $(projectRoot)/requirements.txt
                   displayName: Install dependencies
@@ -131,6 +138,7 @@ stages:
                     scriptType: bash
                     scriptLocation: inlineScript
                     inlineScript: |
+                      . $(Pipeline.Workspace)/mlops-venv/bin/activate
                       cd $(projectRoot)
                       PYTHONPATH=. python pipelines/deploy_model.py \
                         --env test \
@@ -144,6 +152,7 @@ stages:
                     scriptType: bash
                     scriptLocation: inlineScript
                     inlineScript: |
+                      . $(Pipeline.Workspace)/mlops-venv/bin/activate
                       cd $(projectRoot)
                       PYTHONPATH=. python pipelines/smoke_test_endpoint.py --env test
 
@@ -154,15 +163,16 @@ stages:
     jobs:
       - deployment: deploy_prod
         environment: aml-prod
+        pool:
+          name: $(selfHostedPool)
         strategy:
           runOnce:
             deploy:
               steps:
                 - checkout: self
-                - task: UsePythonVersion@0
-                  inputs:
-                    versionSpec: '$(pythonVersion)'
                 - script: |
+                    python3 -m venv $(Pipeline.Workspace)/mlops-venv
+                    . $(Pipeline.Workspace)/mlops-venv/bin/activate
                     python -m pip install --upgrade pip
                     pip install -r $(projectRoot)/requirements.txt
                   displayName: Install dependencies
@@ -173,6 +183,7 @@ stages:
                     scriptType: bash
                     scriptLocation: inlineScript
                     inlineScript: |
+                      . $(Pipeline.Workspace)/mlops-venv/bin/activate
                       cd $(projectRoot)
                       PYTHONPATH=. python pipelines/deploy_model.py \
                         --env prod \

@@ -134,6 +134,30 @@ variable "service_principal_key" {
   default     = null
 }
 
+variable "agent_vm_size" {
+  description = "VM size for the self-hosted Azure DevOps agent scale set."
+  type        = string
+  default     = "Standard_B2ms"
+}
+
+variable "agent_pool_name" {
+  description = "Azure DevOps elastic agent pool name backed by the agent VMSS."
+  type        = string
+  default     = "aml-selfhosted-agents"
+}
+
+variable "agent_pool_max_capacity" {
+  description = "Maximum number of agent VMs the elastic pool may scale to."
+  type        = number
+  default     = 2
+}
+
+variable "agent_pool_desired_idle" {
+  description = "Number of idle agents to keep warm. 0 scales to zero (cheapest; first job waits a few minutes for a VM)."
+  type        = number
+  default     = 0
+}
+
 variable "bootstrap_adopt" {
   description = "One-time adoption list for resources that already exist in Azure but are not yet in Terraform state. Empty (default) on fresh setups. Use [\"all\"], kind names (e.g. \"storage\"), or kind:env entries (e.g. \"storage:dev\"). See imports.tf."
   type        = set(string)
