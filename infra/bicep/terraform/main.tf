@@ -177,10 +177,31 @@ resource "azapi_resource" "registry" {
   }
 
   body = jsonencode({
-    sku = {
-      name = "Basic"
+    properties = {
+      # Registry has no private endpoint in this stack; promotion/deployment
+      # pipelines on hosted agents reach it over its public endpoint.
+      publicNetworkAccess = "Enabled"
+      regionDetails = [
+        {
+          location = var.location
+          storageAccountDetails = [
+            {
+              systemCreatedStorageAccount = {
+                storageAccountType       = "Standard_LRS"
+                storageAccountHnsEnabled = false
+              }
+            }
+          ]
+          acrDetails = [
+            {
+              systemCreatedAcrAccount = {
+                acrAccountSku = "Premium"
+              }
+            }
+          ]
+        }
+      ]
     }
-    properties = {}
   })
 }
 
