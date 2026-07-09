@@ -18,6 +18,27 @@ It is designed to show how an enterprise setup is structured end to end:
 
 This README is the main onboarding guide. A new engineer should be able to understand the system from here before going deeper into the supporting docs.
 
+## Documentation Index — Read In This Order
+
+1. [docs/concepts.md](docs/concepts.md)
+   Plain-language explanations of every building block: hosted vs
+   self-hosted agents, elastic pools, private endpoints, private DNS, NAT,
+   NSGs, Terraform state and adoption, AML workspaces/compute/registry/
+   endpoints, approval gates.
+2. [docs/setup-walkthrough.md](docs/setup-walkthrough.md)
+   The chronological story of how this tenant was actually set up — each
+   phase, why it exists, and the real failures hit along the way (state
+   drift, registry payload, pool authorization) with their fixes.
+3. [infra/platform-inventory.md](infra/platform-inventory.md)
+   The infrastructure contract: the complete, frozen list of everything
+   Terraform provisions, deliberate exclusions, and steady-state costs.
+4. [infra/bicep/terraform/README.md](infra/bicep/terraform/README.md)
+   Terraform operations: fresh setup vs adopting existing resources,
+   remote state, the two bootstrap scripts.
+5. [azure-devops/README.md](azure-devops/README.md)
+   The CI/CD pipelines: stage-by-stage behavior, agent pools, first-run
+   authorization notes.
+
 ## What This Project Is
 
 This repo is not just a training script bundle.

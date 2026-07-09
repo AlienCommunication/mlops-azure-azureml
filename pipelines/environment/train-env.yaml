@@ -11,6 +11,7 @@ conda_file:
     - pip:
         - azure-ai-ml==1.24.0
         - azure-identity==1.17.1
+        - marshmallow==3.23.2
         - mlflow==2.14.3
         - scikit-learn==1.5.1
         - pandas==2.2.2

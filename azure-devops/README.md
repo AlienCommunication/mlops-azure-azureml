@@ -16,14 +16,32 @@ Dedicated Terraform infrastructure pipeline for:
 
 ### `azure-pipelines.yml`
 
-Primary multi-stage pipeline for:
+Primary multi-stage pipeline for the model lifecycle. Stages that touch the
+private AML workspaces run on the self-hosted agent pool
+`aml-selfhosted-agents` (in-VNet); the rest use Microsoft-hosted agents.
 
-- validation
-- AML training submission
-- registry promotion
-- test deployment
-- prod deployment
-- monitoring config generation
+| Stage | Agent | What it does |
+|-------|-------|--------------|
+| Validate | hosted | Local smoke train on synthetic data |
+| Train_Dev | self-hosted | Registers the training data asset, submits the AML pipeline, streams it to completion, enforces the evaluation gate, registers the model, emits `WORKSPACE_MODEL_VERSION` |
+| Promote_To_Test | self-hosted | Approval-gated; promotes the model to the shared registry, emits `REGISTRY_MODEL_VERSION` |
+| Deploy_Test | self-hosted | Deploys the registry model to the test endpoint, smoke-tests it |
+| Deploy_Prod | self-hosted | Approval-gated; deploys to prod |
+| Configure_Monitoring | hosted | Generates monitoring config artifact |
+
+Model versions flow between stages as output variables — no manually set
+`WORKSPACE_MODEL_VERSION` / `REGISTRY_MODEL_VERSION` pipeline variables are
+needed. Human input is exactly the two approvals.
+
+First-run notes:
+
+- The pool must grant this pipeline permission once (pool page → Security →
+  Pipeline permissions), or the run fails with "Pipeline does not have
+  permissions to use the referenced pool".
+- With scale-to-zero agents, the first self-hosted job waits ~5–10 minutes
+  for a VM to boot.
+- The first Train_Dev run also builds the AML environment image on the
+  compute cluster (~10–20 minutes, one time).
 
 ### `azure-pipelines-monitoring.yml`
 
