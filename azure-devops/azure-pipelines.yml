@@ -167,6 +167,19 @@ stages:
                         --model-version $(REGISTRY_MODEL_VERSION) \
                         --source registry
                 - task: AzureCLI@2
+                  displayName: Fetch deployment logs on failure
+                  condition: failed()
+                  inputs:
+                    azureSubscription: '$(serviceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az extension add -n ml -y 2>/dev/null || true
+                      az ml online-deployment get-logs --name blue \
+                        --endpoint-name used-car-price-test \
+                        --workspace-name aml-ws-test --resource-group rg-aml-test \
+                        --lines 200 || echo "No deployment logs available."
+                - task: AzureCLI@2
                   displayName: Smoke test test endpoint
                   inputs:
                     azureSubscription: '$(serviceConnection)'
@@ -215,6 +228,19 @@ stages:
                         --model-name $(modelName) \
                         --model-version $(REGISTRY_MODEL_VERSION) \
                         --source registry
+                - task: AzureCLI@2
+                  displayName: Fetch deployment logs on failure
+                  condition: failed()
+                  inputs:
+                    azureSubscription: '$(serviceConnection)'
+                    scriptType: bash
+                    scriptLocation: inlineScript
+                    inlineScript: |
+                      az extension add -n ml -y 2>/dev/null || true
+                      az ml online-deployment get-logs --name blue \
+                        --endpoint-name used-car-price-prod \
+                        --workspace-name aml-ws-prod --resource-group rg-aml-prod \
+                        --lines 200 || echo "No deployment logs available."
 
   - stage: Configure_Monitoring
     displayName: Configure Monitoring Assets
