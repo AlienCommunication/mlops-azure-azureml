@@ -41,6 +41,9 @@ def deploy(env_name: str, model_name: str, model_version: str, source: str) -> N
         name=endpoint_name,
         description=f"Used car price endpoint for {env_name}",
         auth_mode="key",
+        # Private posture: scoring is reachable only through the workspace
+        # private endpoint, not the public internet.
+        public_network_access=config["deployment"].get("public_network_access", "disabled"),
         tags=config["tags"],
     )
     ml_client.online_endpoints.begin_create_or_update(endpoint).result()
@@ -53,6 +56,9 @@ def deploy(env_name: str, model_name: str, model_version: str, source: str) -> N
         environment=f"azureml:{serving_env.name}:{serving_env.version}",
         instance_type=config["deployment"]["instance_type"],
         instance_count=config["deployment"]["instance_count"],
+        # Required with private ACR/storage: the deployment pulls its image
+        # and model over managed private endpoints instead of the internet.
+        egress_public_network_access=config["deployment"].get("egress_public_network_access", "disabled"),
     )
 
     ml_client.online_deployments.begin_create_or_update(deployment).result()
