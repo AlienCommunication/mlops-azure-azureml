@@ -159,6 +159,9 @@ resource "azapi_resource" "workspace" {
       containerRegistry   = azurerm_container_registry.env[each.key].id
       applicationInsights = azurerm_application_insights.env[each.key].id
       publicNetworkAccess = var.enable_private_networking ? "Disabled" : "Enabled"
+      # With a private ACR, AML cannot use ACR Tasks to build environment
+      # images; builds run on this compute cluster instead.
+      imageBuildCompute = "cpu-cluster-${each.key}"
     }
   })
 }
@@ -584,4 +587,143 @@ resource "azuredevops_elastic_pool" "agents" {
   time_to_live_minutes   = 15
   auto_provision         = false
   auto_update            = true
+}
+
+# ---------------------------------------------------------------------------
+# AML training compute
+# Clusters are VNet-injected (no public node IPs) so nodes resolve and reach
+# the private storage/Key Vault/ACR endpoints. The shared NAT gateway gives
+# nodes the outbound path they need to the AML control plane.
+# ---------------------------------------------------------------------------
+
+resource "azurerm_subnet" "training" {
+  count = var.enable_private_networking ? 1 : 0
+
+  name                 = "snet-aml-training"
+  resource_group_name  = azurerm_resource_group.network[0].name
+  virtual_network_name = azurerm_virtual_network.shared[0].name
+  address_prefixes     = [var.training_subnet_prefix]
+}
+
+resource "azurerm_subnet_nat_gateway_association" "training" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled ? 1 : 0
+
+  subnet_id      = azurerm_subnet.training[0].id
+  nat_gateway_id = azurerm_nat_gateway.agents[0].id
+}
+
+resource "azurerm_machine_learning_compute_cluster" "cpu" {
+  for_each = local.env_map
+
+  name                          = "cpu-cluster-${each.key}"
+  location                      = azurerm_resource_group.env[each.key].location
+  machine_learning_workspace_id = azapi_resource.workspace[each.key].id
+  vm_priority                   = "Dedicated"
+  vm_size                       = var.compute_vm_size
+
+  subnet_resource_id     = var.enable_private_networking ? azurerm_subnet.training[0].id : null
+  node_public_ip_enabled = var.enable_private_networking ? false : true
+
+  identity {
+    type = "SystemAssigned"
+  }
+
+  scale_settings {
+    min_node_count                       = 0
+    max_node_count                       = var.compute_max_nodes
+    scale_down_nodes_after_idle_duration = "PT30M"
+  }
+
+  tags = merge(var.tags, { environment = each.key })
+
+  depends_on = [
+    azurerm_private_endpoint.workspace,
+    azurerm_private_endpoint.storage_blob,
+    azurerm_subnet_nat_gateway_association.training,
+  ]
+}
+
+# ---------------------------------------------------------------------------
+# Storage file-share private endpoints
+# AML workspaces use two storage subresources: blob (job code, artifacts,
+# logs) and file (workspace file share). Both need private endpoints when
+# public storage access is disabled.
+# ---------------------------------------------------------------------------
+
+resource "azurerm_private_dns_zone" "file" {
+  count = var.enable_private_networking ? 1 : 0
+
+  name                = "privatelink.file.core.windows.net"
+  resource_group_name = azurerm_resource_group.network[0].name
+  tags                = var.tags
+}
+
+resource "azurerm_private_dns_zone_virtual_network_link" "file" {
+  count = var.enable_private_networking ? 1 : 0
+
+  name                  = "${var.prefix}-file-link"
+  resource_group_name   = azurerm_resource_group.network[0].name
+  private_dns_zone_name = azurerm_private_dns_zone.file[0].name
+  virtual_network_id    = azurerm_virtual_network.shared[0].id
+}
+
+resource "azurerm_private_endpoint" "storage_file" {
+  for_each = var.enable_private_networking ? local.env_map : {}
+
+  name                = "${var.prefix}-${each.key}-file-pe"
+  location            = azurerm_resource_group.env[each.key].location
+  resource_group_name = azurerm_resource_group.env[each.key].name
+  subnet_id           = azurerm_subnet.private_endpoints[0].id
+
+  private_service_connection {
+    name                           = "${var.prefix}-${each.key}-file-psc"
+    private_connection_resource_id = azurerm_storage_account.env[each.key].id
+    is_manual_connection           = false
+    subresource_names              = ["file"]
+  }
+
+  private_dns_zone_group {
+    name                 = "file-dns"
+    private_dns_zone_ids = [azurerm_private_dns_zone.file[0].id]
+  }
+}
+
+# ---------------------------------------------------------------------------
+# Network security groups
+# Baseline segmentation for the compute-bearing subnets. No custom rules are
+# needed: attaching an NSG enforces Azure's default posture explicitly
+# (VNet traffic allowed, inbound from internet denied, outbound allowed —
+# outbound is required for Azure DevOps and the AML control plane).
+# ---------------------------------------------------------------------------
+
+resource "azurerm_network_security_group" "agents" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled ? 1 : 0
+
+  name                = "${var.prefix}-agents-nsg"
+  location            = azurerm_resource_group.network[0].location
+  resource_group_name = azurerm_resource_group.network[0].name
+  tags                = var.tags
+}
+
+resource "azurerm_subnet_network_security_group_association" "agents" {
+  count = var.enable_private_networking && var.self_hosted_agents_enabled ? 1 : 0
+
+  subnet_id                 = azurerm_subnet.agents[0].id
+  network_security_group_id = azurerm_network_security_group.agents[0].id
+}
+
+resource "azurerm_network_security_group" "training" {
+  count = var.enable_private_networking ? 1 : 0
+
+  name                = "${var.prefix}-training-nsg"
+  location            = azurerm_resource_group.network[0].location
+  resource_group_name = azurerm_resource_group.network[0].name
+  tags                = var.tags
+}
+
+resource "azurerm_subnet_network_security_group_association" "training" {
+  count = var.enable_private_networking ? 1 : 0
+
+  subnet_id                 = azurerm_subnet.training[0].id
+  network_security_group_id = azurerm_network_security_group.training[0].id
 }

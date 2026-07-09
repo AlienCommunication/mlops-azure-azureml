@@ -25,7 +25,7 @@ def promote_model(
     promoted = registry_client.models.create_or_update(
         Model(
             name=model_name,
-            version=registry_model_version,
+            version=registry_model_version or str(workspace_model_version),
             path=registry_path,
             type=AssetTypes.CUSTOM_MODEL,
             description=source_model.description,
@@ -41,6 +41,8 @@ def promote_model(
         f"Promoted workspace model {model_name}:{workspace_model_version} "
         f"to registry version {promoted.version}"
     )
+    # Azure DevOps output variable for downstream deploy stages.
+    print(f"##vso[task.setvariable variable=REGISTRY_MODEL_VERSION;isOutput=true]{promoted.version}")
 
 
 def main() -> None:

@@ -134,6 +134,24 @@ variable "service_principal_key" {
   default     = null
 }
 
+variable "training_subnet_prefix" {
+  description = "Subnet prefix for VNet-injected AML compute clusters."
+  type        = string
+  default     = "10.20.3.0/24"
+}
+
+variable "compute_vm_size" {
+  description = "VM size for AML training compute clusters."
+  type        = string
+  default     = "STANDARD_DS3_V2"
+}
+
+variable "compute_max_nodes" {
+  description = "Maximum node count per AML compute cluster."
+  type        = number
+  default     = 2
+}
+
 variable "agent_vm_size" {
   description = "VM size for the self-hosted Azure DevOps agent scale set."
   type        = string

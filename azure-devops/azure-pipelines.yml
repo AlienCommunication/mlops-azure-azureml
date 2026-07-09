@@ -67,7 +67,7 @@ stages:
               echo "This pipeline assumes the Terraform infra pipeline has already provisioned AML, networking, and Azure DevOps foundation resources."
             displayName: Confirm infra prerequisite
           - task: AzureCLI@2
-            displayName: Submit AML training pipeline
+            displayName: Ensure training data asset
             inputs:
               azureSubscription: '$(serviceConnection)'
               scriptType: bash
@@ -75,12 +75,30 @@ stages:
               inlineScript: |
                 . $(Pipeline.Workspace)/mlops-venv/bin/activate
                 cd $(projectRoot)
-                PYTHONPATH=. python pipelines/submit_training_pipeline.py --env dev --data azureml:used-car-training-reference:1
+                PYTHONPATH=. python data/generate_used_car_data.py --rows 10000 --output $(Pipeline.Workspace)/used_cars_train.csv
+                PYTHONPATH=. python pipelines/register_data.py --env dev --csv $(Pipeline.Workspace)/used_cars_train.csv
+          - task: AzureCLI@2
+            name: submit
+            displayName: Train, gate, and register model
+            inputs:
+              azureSubscription: '$(serviceConnection)'
+              scriptType: bash
+              scriptLocation: inlineScript
+              inlineScript: |
+                . $(Pipeline.Workspace)/mlops-venv/bin/activate
+                cd $(projectRoot)
+                PYTHONPATH=. python pipelines/submit_training_pipeline.py \
+                  --env dev \
+                  --data azureml:used-car-training-reference:1 \
+                  --wait \
+                  --register-model
 
   - stage: Promote_To_Test
     displayName: Promote Approved Model To Registry
     dependsOn: Train_Dev
     condition: succeeded()
+    variables:
+      WORKSPACE_MODEL_VERSION: $[ stageDependencies.Train_Dev.train_dev.outputs['submit.WORKSPACE_MODEL_VERSION'] ]
     jobs:
       - deployment: promote_model
         environment: aml-test-approval
@@ -98,6 +116,7 @@ stages:
                     pip install -r $(projectRoot)/requirements.txt
                   displayName: Install dependencies
                 - task: AzureCLI@2
+                  name: promote
                   displayName: Promote workspace model to registry
                   inputs:
                     azureSubscription: '$(serviceConnection)'
@@ -115,6 +134,8 @@ stages:
     displayName: Deploy To Test
     dependsOn: Promote_To_Test
     condition: succeeded()
+    variables:
+      REGISTRY_MODEL_VERSION: $[ stageDependencies.Promote_To_Test.promote_model.outputs['promote_model.promote.REGISTRY_MODEL_VERSION'] ]
     jobs:
       - deployment: deploy_test
         environment: aml-test
@@ -158,8 +179,12 @@ stages:
 
   - stage: Deploy_Prod
     displayName: Deploy To Prod
-    dependsOn: Deploy_Test
+    dependsOn:
+      - Deploy_Test
+      - Promote_To_Test
     condition: succeeded()
+    variables:
+      REGISTRY_MODEL_VERSION: $[ stageDependencies.Promote_To_Test.promote_model.outputs['promote_model.promote.REGISTRY_MODEL_VERSION'] ]
     jobs:
       - deployment: deploy_prod
         environment: aml-prod
