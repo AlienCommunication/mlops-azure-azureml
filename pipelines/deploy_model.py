@@ -15,7 +15,9 @@ def ensure_environment(ml_client):
     # inherited from dev, so create/update it here before deploying. Return
     # the created asset so the deployment can pin its exact version —
     # "@latest" label resolution 404s on freshly created environments.
-    env_path = Path(__file__).resolve().parent / "environment" / "train-env.yaml"
+    # Serving uses its own environment (with azureml-inference-server-http),
+    # separate from the training environment.
+    env_path = Path(__file__).resolve().parent / "environment" / "serve-env.yaml"
     created = ml_client.environments.create_or_update(load_environment(source=env_path))
     print(f"Serving environment ready: {created.name}:{created.version}")
     return created
