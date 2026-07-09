@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
-from azure.ai.ml import load_environment
+from azure.ai.ml import command, load_environment
 from azure.ai.ml.entities import CodeConfiguration, ManagedOnlineDeployment, ManagedOnlineEndpoint
 
 from src.azure_auth import get_ml_client, get_registry_client
@@ -23,11 +23,37 @@ def ensure_environment(ml_client):
     return created
 
 
+def ensure_environment_image(ml_client, serving_env, compute_name: str) -> None:
+    """Build the serving image via a no-op job before deploying.
+
+    Managed online deployments abort after ~20 minutes waiting for an image
+    build, and with a private ACR the build runs as a cluster job whose node
+    allocation alone can exceed that. A job build is patient and observable,
+    and the resulting image is cached in ACR, so the deployment then starts
+    with the image already available.
+    """
+    job = command(
+        command="echo serving image ready",
+        environment=f"azureml:{serving_env.name}:{serving_env.version}",
+        compute=compute_name,
+        display_name=f"warm-serving-image-{serving_env.name}-{serving_env.version}",
+        experiment_name="serving-image-warmup",
+    )
+    created = ml_client.jobs.create_or_update(job)
+    print(f"Serving image warm-up job: {created.name} (streams until image is built)")
+    ml_client.jobs.stream(created.name)
+    final = ml_client.jobs.get(created.name)
+    if final.status != "Completed":
+        raise RuntimeError(f"Serving image warm-up job ended in status {final.status}")
+    print("Serving image available in registry cache.")
+
+
 def deploy(env_name: str, model_name: str, model_version: str, source: str) -> None:
     config = load_env_config(env_name)
     ml_client = get_ml_client(config)
     registry_client = get_registry_client(config) if source == "registry" else None
     serving_env = ensure_environment(ml_client)
+    ensure_environment_image(ml_client, serving_env, config["compute"]["cpu_cluster"])
 
     endpoint_name = config["deployment"]["endpoint_name"]
     deployment_name = config["deployment"]["deployment_name"]
