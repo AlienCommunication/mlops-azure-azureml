@@ -1,17 +1,19 @@
 $schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
 name: used-car-serving-env
-version: 1
+version: 2
 image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
 conda_file:
   channels:
     - conda-forge
   dependencies:
     - python=3.10
-    - pip
+    - pip=24.0
     - pip:
-        # Hosts score.py in managed online deployments; mandatory for
-        # custom serving environments.
-        - azureml-inference-server-http~=1.0
+        # Pinned to 1.4.1 to match the official azureml-examples online
+        # endpoint environments; the 1.5.x line has known worker boot
+        # crashes in its OpenTelemetry/Azure Monitor exporter path.
+        - azureml-inference-server-http==1.4.1
+        - inference-schema[numpy-support]==1.8
         - scikit-learn==1.5.1
         - pandas==2.2.2
         - numpy==1.26.4
