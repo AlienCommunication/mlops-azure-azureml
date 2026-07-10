@@ -32,20 +32,34 @@ def ensure_environment_image(ml_client, serving_env, compute_name: str) -> None:
     and the resulting image is cached in ACR, so the deployment then starts
     with the image already available.
     """
-    job = command(
-        command="echo serving image ready",
-        environment=f"azureml:{serving_env.name}:{serving_env.version}",
-        compute=compute_name,
-        display_name=f"warm-serving-image-{serving_env.name}-{serving_env.version}",
-        experiment_name="serving-image-warmup",
-    )
-    created = ml_client.jobs.create_or_update(job)
-    print(f"Serving image warm-up job: {created.name} (streams until image is built)")
-    ml_client.jobs.stream(created.name)
-    final = ml_client.jobs.get(created.name)
-    if final.status != "Completed":
+    attempts = 2
+    for attempt in range(1, attempts + 1):
+        job = command(
+            command="echo serving image ready",
+            environment=f"azureml:{serving_env.name}:{serving_env.version}",
+            compute=compute_name,
+            display_name=f"warm-serving-image-{serving_env.name}-{serving_env.version}",
+            experiment_name="serving-image-warmup",
+        )
+        created = ml_client.jobs.create_or_update(job)
+        print(f"Serving image warm-up job (attempt {attempt}/{attempts}): {created.name}")
+        try:
+            ml_client.jobs.stream(created.name)
+        except Exception as exc:
+            # Image builds on compute occasionally die with a silent
+            # infrastructure timeout; one retry usually succeeds.
+            if attempt < attempts:
+                print(f"Warm-up attempt {attempt} failed ({exc.__class__.__name__}); retrying once.")
+                continue
+            raise
+        final = ml_client.jobs.get(created.name)
+        if final.status == "Completed":
+            print("Serving image available in registry cache.")
+            return
+        if attempt < attempts:
+            print(f"Warm-up attempt {attempt} ended in status {final.status}; retrying once.")
+            continue
         raise RuntimeError(f"Serving image warm-up job ended in status {final.status}")
-    print("Serving image available in registry cache.")
 
 
 def deploy(env_name: str, model_name: str, model_version: str, source: str) -> None:

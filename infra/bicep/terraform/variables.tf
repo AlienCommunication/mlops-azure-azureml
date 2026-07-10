@@ -141,9 +141,9 @@ variable "training_subnet_prefix" {
 }
 
 variable "compute_vm_size" {
-  description = "VM size for AML training compute clusters."
+  description = "VM size for AML training compute clusters. DSv3 family: modern capacity pools (fast, reliable node allocation) and its own vCPU quota, separate from endpoint (FSv2) quota."
   type        = string
-  default     = "STANDARD_DS3_V2"
+  default     = "STANDARD_D2S_V3"
 }
 
 variable "compute_max_nodes" {
