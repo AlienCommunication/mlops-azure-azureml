@@ -5,9 +5,29 @@ from pathlib import Path
 
 from azure.ai.ml import command, load_environment
 from azure.ai.ml.entities import CodeConfiguration, ManagedOnlineDeployment, ManagedOnlineEndpoint
+from azure.core.exceptions import ResourceNotFoundError
 
 from src.azure_auth import get_ml_client, get_registry_client
 from src.config import load_env_config
+
+
+def remove_failed_deployment(ml_client, endpoint_name: str, deployment_name: str) -> None:
+    # Updating a Failed deployment in place can silently keep serving its
+    # original (stale) code asset even though new code is uploaded; deleting
+    # and recreating guarantees a fresh deployment with fresh references.
+    try:
+        existing = ml_client.online_deployments.get(
+            name=deployment_name, endpoint_name=endpoint_name
+        )
+    except ResourceNotFoundError:
+        return
+    state = (existing.provisioning_state or "").lower()
+    if state == "failed":
+        print(f"Existing deployment '{deployment_name}' is Failed; deleting before recreate.")
+        ml_client.online_deployments.begin_delete(
+            name=deployment_name, endpoint_name=endpoint_name
+        ).result()
+        print("Failed deployment removed.")
 
 
 def ensure_environment(ml_client):
@@ -89,6 +109,8 @@ def deploy(env_name: str, model_name: str, model_version: str, source: str) -> N
         tags=config["tags"],
     )
     ml_client.online_endpoints.begin_create_or_update(endpoint).result()
+
+    remove_failed_deployment(ml_client, endpoint_name, deployment_name)
 
     deployment = ManagedOnlineDeployment(
         name=deployment_name,
